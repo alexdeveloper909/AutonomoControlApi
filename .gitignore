@@ -1,0 +1,19 @@
+# Gradle caches and build outputs
+.gradle/
+.kotlin/
+build/
+
+# IDE/editor files
+.idea/
+*.iml
+.classpath
+.project
+.settings/
+.vscode/
+out/
+
+# OS junk
+.DS_Store
+
+# Logs
+*.log
