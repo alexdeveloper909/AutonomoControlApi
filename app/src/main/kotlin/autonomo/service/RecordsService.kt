@@ -14,10 +14,26 @@ import java.time.LocalDate
 import java.time.YearMonth
 import java.util.UUID
 
+interface RecordsServicePort {
+    fun createRecord(workspaceId: String, userId: String, request: RecordRequest): RecordResponse
+    fun updateRecord(
+        workspaceId: String,
+        userId: String,
+        recordType: RecordType,
+        eventDate: LocalDate,
+        recordId: String,
+        request: RecordRequest
+    ): RecordResponse?
+    fun getRecord(workspaceId: String, recordKey: String): RecordResponse?
+    fun deleteRecord(workspaceId: String, recordKey: String)
+    fun listByMonth(workspaceId: String, month: YearMonth, recordType: RecordType?): RecordsResponse
+    fun listByQuarter(workspaceId: String, quarterKey: String, recordType: RecordType?): RecordsResponse
+}
+
 class RecordsService(
     private val repository: WorkspaceRecordsRepository = WorkspaceRecordsRepository()
-) {
-    fun createRecord(
+) : RecordsServicePort {
+    override fun createRecord(
         workspaceId: String,
         userId: String,
         request: RecordRequest
@@ -52,7 +68,7 @@ class RecordsService(
         return toResponse(item)
     }
 
-    fun updateRecord(
+    override fun updateRecord(
         workspaceId: String,
         userId: String,
         recordType: RecordType,
@@ -79,16 +95,16 @@ class RecordsService(
         return toResponse(updated)
     }
 
-    fun getRecord(workspaceId: String, recordKey: String): RecordResponse? {
+    override fun getRecord(workspaceId: String, recordKey: String): RecordResponse? {
         val item = repository.get(workspaceId, recordKey) ?: return null
         return toResponse(item)
     }
 
-    fun deleteRecord(workspaceId: String, recordKey: String) {
+    override fun deleteRecord(workspaceId: String, recordKey: String) {
         repository.delete(workspaceId, recordKey)
     }
 
-    fun listByMonth(
+    override fun listByMonth(
         workspaceId: String,
         month: YearMonth,
         recordType: RecordType?
@@ -97,7 +113,7 @@ class RecordsService(
         return RecordsResponse(items.map(::toResponse))
     }
 
-    fun listByQuarter(
+    override fun listByQuarter(
         workspaceId: String,
         quarterKey: String,
         recordType: RecordType?

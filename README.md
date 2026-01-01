@@ -84,6 +84,14 @@ Environment variables:
 ./gradlew build
 ```
 
+## Tests
+
+Unit tests cover controller validation and payload date derivation. Run them with:
+
+```bash
+./gradlew test
+```
+
 ## Lambda handler
 
 Use `autonomo.handler.RecordsLambda` as the handler entrypoint in CDK.

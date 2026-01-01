@@ -4,13 +4,14 @@ import autonomo.model.RecordKey
 import autonomo.model.RecordRequest
 import autonomo.model.RecordType
 import autonomo.service.RecordsService
+import autonomo.service.RecordsServicePort
 import autonomo.util.HttpResponse
 import autonomo.util.HttpResponses
 import java.time.LocalDate
 import java.time.YearMonth
 
 class RecordsController(
-    private val service: RecordsService = RecordsService()
+    private val service: RecordsServicePort = RecordsService()
 ) {
     fun createRecord(workspaceId: String?, body: String?, userId: String?): HttpResponse {
         if (workspaceId.isNullOrBlank()) return HttpResponses.badRequest("workspaceId is required")
