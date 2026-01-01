@@ -3,24 +3,29 @@ package autonomo.controller
 import autonomo.model.RecordKey
 import autonomo.model.RecordRequest
 import autonomo.model.RecordType
+import autonomo.model.UserContext
 import autonomo.service.RecordsService
 import autonomo.service.RecordsServicePort
+import autonomo.service.WorkspaceAccessPort
+import autonomo.service.WorkspaceAccessService
 import autonomo.util.HttpResponse
 import autonomo.util.HttpResponses
 import java.time.LocalDate
 import java.time.YearMonth
 
 class RecordsController(
-    private val service: RecordsServicePort = RecordsService()
+    private val service: RecordsServicePort = RecordsService(),
+    private val access: WorkspaceAccessPort = WorkspaceAccessService()
 ) {
-    fun createRecord(workspaceId: String?, body: String?, userId: String?): HttpResponse {
+    fun createRecord(workspaceId: String?, body: String?, user: UserContext?): HttpResponse {
         if (workspaceId.isNullOrBlank()) return HttpResponses.badRequest("workspaceId is required")
-        val caller = userId ?: return HttpResponses.unauthorized()
+        val caller = user ?: return HttpResponses.unauthorized()
+        ensureAccess(workspaceId, caller)?.let { return it }
         if (body.isNullOrBlank()) return HttpResponses.badRequest("body is required")
 
         return runCatching {
             val request = Json.readRequest(body)
-            val response = service.createRecord(workspaceId, caller, request)
+            val response = service.createRecord(workspaceId, caller.userId, request)
             HttpResponses.created(response)
         }.getOrElse { error ->
             when (error) {
@@ -36,10 +41,11 @@ class RecordsController(
         eventDateParam: String?,
         recordId: String?,
         body: String?,
-        userId: String?
+        user: UserContext?
     ): HttpResponse {
         if (workspaceId.isNullOrBlank()) return HttpResponses.badRequest("workspaceId is required")
-        val caller = userId ?: return HttpResponses.unauthorized()
+        val caller = user ?: return HttpResponses.unauthorized()
+        ensureAccess(workspaceId, caller)?.let { return it }
         if (body.isNullOrBlank()) return HttpResponses.badRequest("body is required")
         val recordType = parseRecordType(recordTypeParam) ?: return HttpResponses.badRequest("recordType is invalid")
         val eventDate = parseEventDate(eventDateParam) ?: return HttpResponses.badRequest("eventDate is invalid")
@@ -53,7 +59,7 @@ class RecordsController(
             if (request.recordId != null && request.recordId != recordId) {
                 return HttpResponses.badRequest("recordId must match the path when provided")
             }
-            val response = service.updateRecord(workspaceId, caller, recordType, eventDate, recordId, request)
+            val response = service.updateRecord(workspaceId, caller.userId, recordType, eventDate, recordId, request)
                 ?: return HttpResponses.notFound("record not found")
             HttpResponses.ok(response)
         }.getOrElse { HttpResponses.badRequest(it.message ?: "Invalid request") }
@@ -64,10 +70,11 @@ class RecordsController(
         recordTypeParam: String?,
         eventDateParam: String?,
         recordId: String?,
-        userId: String?
+        user: UserContext?
     ): HttpResponse {
         if (workspaceId.isNullOrBlank()) return HttpResponses.badRequest("workspaceId is required")
-        val caller = userId ?: return HttpResponses.unauthorized()
+        val caller = user ?: return HttpResponses.unauthorized()
+        ensureAccess(workspaceId, caller)?.let { return it }
         val recordType = parseRecordType(recordTypeParam) ?: return HttpResponses.badRequest("recordType is invalid")
         val eventDate = parseEventDate(eventDateParam) ?: return HttpResponses.badRequest("eventDate is invalid")
         if (recordId.isNullOrBlank()) return HttpResponses.badRequest("recordId is required")
@@ -82,10 +89,11 @@ class RecordsController(
         recordTypeParam: String?,
         eventDateParam: String?,
         recordId: String?,
-        userId: String?
+        user: UserContext?
     ): HttpResponse {
         if (workspaceId.isNullOrBlank()) return HttpResponses.badRequest("workspaceId is required")
-        userId ?: return HttpResponses.unauthorized()
+        val caller = user ?: return HttpResponses.unauthorized()
+        ensureAccess(workspaceId, caller)?.let { return it }
         val recordType = parseRecordType(recordTypeParam) ?: return HttpResponses.badRequest("recordType is invalid")
         val eventDate = parseEventDate(eventDateParam) ?: return HttpResponses.badRequest("eventDate is invalid")
         if (recordId.isNullOrBlank()) return HttpResponses.badRequest("recordId is required")
@@ -98,10 +106,11 @@ class RecordsController(
     fun listRecords(
         workspaceId: String?,
         queryParams: Map<String, String>,
-        userId: String?
+        user: UserContext?
     ): HttpResponse {
         if (workspaceId.isNullOrBlank()) return HttpResponses.badRequest("workspaceId is required")
-        userId ?: return HttpResponses.unauthorized()
+        val caller = user ?: return HttpResponses.unauthorized()
+        ensureAccess(workspaceId, caller)?.let { return it }
 
         val month = queryParams["month"]
         val quarter = queryParams["quarter"]
@@ -145,6 +154,14 @@ class RecordsController(
     private fun parseRecordType(value: String?): RecordType? {
         if (value.isNullOrBlank()) return null
         return runCatching { RecordType.valueOf(value.uppercase()) }.getOrNull()
+    }
+
+    private fun ensureAccess(workspaceId: String, user: UserContext): HttpResponse? {
+        return if (access.canAccess(workspaceId, user)) {
+            null
+        } else {
+            HttpResponses.forbidden("User is not a member of the workspace")
+        }
     }
 
     private object Json {

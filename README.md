@@ -22,6 +22,8 @@ This service expects the existing `workspace_records` table described in the spe
 Stored attributes per record include:
 `record_id`, `record_type`, `event_date`, `payload_json`, `workspace_month`, `workspace_quarter`, `created_at`, `updated_at`, `created_by`, `updated_by`.
 
+Membership checks use the `workspace_members` table before allowing CRUD. The handler looks up `USER#<user_id>` and optionally `EMAIL#<lowercased_email>` for the workspace.
+
 Payload conventions:
 - Money fields are JSON numbers (e.g., `baseExclVat: 1000.00`).
 - Percentage fields are JSON numbers in `[0,1]` (e.g., `deductibleShare: 0.5`).
@@ -70,6 +72,7 @@ Environment variables:
 
 - `ENV` (default `local`)
 - `WORKSPACE_RECORDS_TABLE` (default `workspace_records`)
+- `WORKSPACE_MEMBERS_TABLE` (default `workspace_members`)
 - `DYNAMODB_ENDPOINT` (default `http://localhost:8000` for local DynamoDB)
 - `AWS_REGION` or `AWS_DEFAULT_REGION` (default `eu-west-1`)
 

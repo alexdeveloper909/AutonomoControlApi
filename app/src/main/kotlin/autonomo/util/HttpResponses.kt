@@ -18,6 +18,7 @@ object HttpResponses {
     fun noContent(): HttpResponse = HttpResponse(204, null, emptyMap())
     fun badRequest(message: String): HttpResponse = error(400, message)
     fun unauthorized(message: String = "Unauthorized"): HttpResponse = error(401, message)
+    fun forbidden(message: String = "Forbidden"): HttpResponse = error(403, message)
     fun notFound(message: String = "Not found"): HttpResponse = error(404, message)
     fun conflict(message: String): HttpResponse = error(409, message)
     fun serverError(message: String): HttpResponse = error(500, message)

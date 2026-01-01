@@ -7,6 +7,8 @@ object AppConfig {
         ?: "eu-west-1"
     val workspaceRecordsTable: String = System.getenv("WORKSPACE_RECORDS_TABLE")
         ?: "workspace_records"
+    val workspaceMembersTable: String = System.getenv("WORKSPACE_MEMBERS_TABLE")
+        ?: "workspace_members"
     val dynamoEndpoint: String = System.getenv("DYNAMODB_ENDPOINT") ?: "http://localhost:8000"
 
     val isLocal: Boolean = env.equals("local", ignoreCase = true)

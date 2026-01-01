@@ -1,6 +1,7 @@
 package autonomo.handler
 
 import autonomo.controller.RecordsController
+import autonomo.model.UserContext
 import autonomo.util.HttpResponse
 import autonomo.util.HttpResponses
 import com.amazonaws.services.lambda.runtime.Context
@@ -27,7 +28,7 @@ class RecordsLambda : RequestHandler<APIGatewayV2HTTPEvent, APIGatewayV2HTTPResp
         val path = event.rawPath ?: ""
         val method = event.requestContext?.http?.method ?: "GET"
         val segments = path.trim('/').split('/').filter { it.isNotBlank() }
-        val userId = userId(event)
+        val user = userContext(event)
 
         if (segments.isEmpty()) {
             return HttpResponses.notFound("Route not found")
@@ -41,15 +42,15 @@ class RecordsLambda : RequestHandler<APIGatewayV2HTTPEvent, APIGatewayV2HTTPResp
             val workspaceId = segments.getOrNull(1)
             return when {
                 segments.size == 3 && method == "POST" ->
-                    controller.createRecord(workspaceId, event.body, userId)
+                    controller.createRecord(workspaceId, event.body, user)
                 segments.size == 3 && method == "GET" ->
-                    controller.listRecords(workspaceId, event.queryStringParameters ?: emptyMap(), userId)
+                    controller.listRecords(workspaceId, event.queryStringParameters ?: emptyMap(), user)
                 segments.size == 6 && method == "GET" ->
-                    controller.getRecord(workspaceId, segments[3], segments[4], segments[5], userId)
+                    controller.getRecord(workspaceId, segments[3], segments[4], segments[5], user)
                 segments.size == 6 && method == "PUT" ->
-                    controller.updateRecord(workspaceId, segments[3], segments[4], segments[5], event.body, userId)
+                    controller.updateRecord(workspaceId, segments[3], segments[4], segments[5], event.body, user)
                 segments.size == 6 && method == "DELETE" ->
-                    controller.deleteRecord(workspaceId, segments[3], segments[4], segments[5], userId)
+                    controller.deleteRecord(workspaceId, segments[3], segments[4], segments[5], user)
                 else -> HttpResponses.notFound("Route not found")
             }
         }
@@ -57,9 +58,12 @@ class RecordsLambda : RequestHandler<APIGatewayV2HTTPEvent, APIGatewayV2HTTPResp
         return HttpResponses.notFound("Route not found")
     }
 
-    private fun userId(event: APIGatewayV2HTTPEvent): String? {
+    private fun userContext(event: APIGatewayV2HTTPEvent): UserContext? {
         val jwtClaims = event.requestContext?.authorizer?.jwt?.claims
-        return jwtClaims?.get("sub")?.toString()
+        val userId = jwtClaims?.get("sub")?.toString()
             ?: jwtClaims?.get("username")?.toString()
+            ?: return null
+        val email = jwtClaims?.get("email")?.toString()
+        return UserContext(userId = userId, email = email)
     }
 }

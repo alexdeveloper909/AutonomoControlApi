@@ -4,7 +4,9 @@ import autonomo.config.JsonSupport
 import autonomo.model.RecordResponse
 import autonomo.model.RecordType
 import autonomo.model.RecordsResponse
+import autonomo.model.UserContext
 import autonomo.service.RecordsServicePort
+import autonomo.service.WorkspaceAccessPort
 import autonomo.util.ApiError
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -17,7 +19,7 @@ class RecordsControllerTest {
     @Test
     fun createRecordReturns201() {
         val service = FakeRecordsService()
-        val controller = RecordsController(service)
+        val controller = RecordsController(service, FakeAccessService(true))
 
         val body = """
             {
@@ -33,7 +35,7 @@ class RecordsControllerTest {
             }
         """.trimIndent()
 
-        val response = controller.createRecord("ws-1", body, "user-1")
+        val response = controller.createRecord("ws-1", body, UserContext("user-1", "user@example.com"))
 
         assertEquals(201, response.statusCode)
         assertTrue(response.body?.contains("\"recordType\":\"INVOICE\"") == true)
@@ -43,7 +45,7 @@ class RecordsControllerTest {
 
     @Test
     fun createRecordWithoutUserReturns401() {
-        val controller = RecordsController(FakeRecordsService())
+        val controller = RecordsController(FakeRecordsService(), FakeAccessService(true))
 
         val response = controller.createRecord("ws-1", "{}", null)
 
@@ -52,7 +54,7 @@ class RecordsControllerTest {
 
     @Test
     fun updateRecordRejectsBodyRecordTypeMismatch() {
-        val controller = RecordsController(FakeRecordsService())
+        val controller = RecordsController(FakeRecordsService(), FakeAccessService(true))
 
         val body = """
             {
@@ -61,7 +63,14 @@ class RecordsControllerTest {
             }
         """.trimIndent()
 
-        val response = controller.updateRecord("ws-1", "INVOICE", "2024-06-10", "rec-1", body, "user-1")
+        val response = controller.updateRecord(
+            "ws-1",
+            "INVOICE",
+            "2024-06-10",
+            "rec-1",
+            body,
+            UserContext("user-1", "user@example.com")
+        )
 
         assertEquals(400, response.statusCode)
         val error = JsonSupport.mapper.readValue(response.body, ApiError::class.java)
@@ -70,13 +79,22 @@ class RecordsControllerTest {
 
     @Test
     fun listRecordsRequiresMonthOrQuarter() {
-        val controller = RecordsController(FakeRecordsService())
+        val controller = RecordsController(FakeRecordsService(), FakeAccessService(true))
 
-        val response = controller.listRecords("ws-1", emptyMap(), "user-1")
+        val response = controller.listRecords("ws-1", emptyMap(), UserContext("user-1", "user@example.com"))
 
         assertEquals(400, response.statusCode)
         val error = JsonSupport.mapper.readValue(response.body, ApiError::class.java)
         assertEquals("month or quarter is required", error.message)
+    }
+
+    @Test
+    fun createRecordWithoutMembershipReturns403() {
+        val controller = RecordsController(FakeRecordsService(), FakeAccessService(false))
+
+        val response = controller.createRecord("ws-1", "{}", UserContext("user-1", "user@example.com"))
+
+        assertEquals(403, response.statusCode)
     }
 
     private class FakeRecordsService : RecordsServicePort {
@@ -123,5 +141,9 @@ class RecordsControllerTest {
                 updatedBy = "user-1"
             )
         }
+    }
+
+    private class FakeAccessService(private val allowed: Boolean) : WorkspaceAccessPort {
+        override fun canAccess(workspaceId: String, user: UserContext): Boolean = allowed
     }
 }

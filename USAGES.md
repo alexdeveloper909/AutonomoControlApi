@@ -5,7 +5,7 @@ This document explains how to call the Lambda-backed REST API and how to wire th
 ## Base assumptions
 
 - All endpoints are under the same Lambda handler: `autonomo.handler.RecordsLambda`.
-- Authorization is handled by API Gateway JWT authorizer. The handler reads `sub` (or `username`) from the JWT claims.
+- Authorization is handled by API Gateway JWT authorizer. The handler reads `sub` (or `username`) and `email` from the JWT claims.
 - All bodies are JSON with `Content-Type: application/json`.
 - Dates are ISO `YYYY-MM-DD` strings.
 - `monthKey` is `YYYY-MM`.
@@ -181,8 +181,19 @@ Common errors:
 
 - 400: missing params, invalid date/recordType, bad JSON, or payload validation failures.
 - 401: missing/invalid JWT authorizer.
+- 403: user is not a member of the workspace.
 - 404: record not found.
 - 409: create conflict when `recordKey` already exists.
+
+## Workspace membership checks
+
+Before any record CRUD, the handler verifies the caller is a member of the workspace using the `workspace_members` table:
+
+- Primary lookup: `PK = workspace_id`, `SK = USER#<user_id>`
+- Fallback lookup (if email is present): `PK = workspace_id`, `SK = EMAIL#<lowercased_email>`
+- Allowed statuses: `ACTIVE`, `ACCEPTED`, `OWNER` (or `status` missing)
+
+If no membership is found (or status is not allowed), the API returns `403`.
 
 ## API Gateway wiring (HTTP API v2)
 
@@ -201,7 +212,7 @@ Authorizer:
 
 - Use a JWT authorizer pointing at your Cognito user pool.
 - Require it on all routes except `/health` if desired.
-- The handler reads `sub` from the JWT claims to set `createdBy`/`updatedBy`.
+- The handler reads `sub` and `email` from the JWT claims to set `createdBy`/`updatedBy` and check membership.
 
 Integration:
 
