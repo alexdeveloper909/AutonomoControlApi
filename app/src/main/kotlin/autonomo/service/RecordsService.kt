@@ -8,6 +8,7 @@ import autonomo.model.RecordResponse
 import autonomo.model.RecordType
 import autonomo.model.RecordsResponse
 import autonomo.repository.WorkspaceRecordsRepository
+import autonomo.repository.WorkspaceRecordsRepositoryPort
 import autonomo.util.RecordPayloadParser
 import java.time.Instant
 import java.time.LocalDate
@@ -31,7 +32,7 @@ interface RecordsServicePort {
 }
 
 class RecordsService(
-    private val repository: WorkspaceRecordsRepository = WorkspaceRecordsRepository()
+    private val repository: WorkspaceRecordsRepositoryPort = WorkspaceRecordsRepository()
 ) : RecordsServicePort {
     override fun createRecord(
         workspaceId: String,

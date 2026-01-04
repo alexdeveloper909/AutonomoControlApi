@@ -6,7 +6,7 @@ import autonomo.domain.Invoice
 import autonomo.domain.IvaRate
 import autonomo.domain.Money
 import autonomo.domain.MonthKey
-import autonomo.domain.Percentage
+import autonomo.domain.Rate
 import autonomo.domain.RetencionRate
 import autonomo.domain.StatePayment
 import autonomo.domain.StatePaymentType
@@ -45,7 +45,7 @@ class RecordPayloadParserTest {
             baseExclVat = Money(BigDecimal("50")),
             ivaRate = IvaRate.REDUCED,
             vatRecoverableFlag = true,
-            deductibleShare = Percentage(BigDecimal("0.5"))
+            deductibleShare = Rate.fromDecimal("0.5")
         )
 
         val eventDate = RecordPayloadParser.eventDate(RecordType.EXPENSE, expense)
@@ -56,7 +56,7 @@ class RecordPayloadParserTest {
     @Test
     fun budgetEventDateUsesMonthKeyFirstDay() {
         val budget = BudgetEntry(
-            monthKey = MonthKey("2024-07"),
+            monthKey = MonthKey.of(2024, 7),
             plannedSpend = Money(BigDecimal("1000")),
             earned = Money(BigDecimal("1200")),
             description = "Summer",

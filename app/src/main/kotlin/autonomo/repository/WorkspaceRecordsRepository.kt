@@ -17,8 +17,8 @@ import software.amazon.awssdk.services.dynamodb.model.QueryRequest
 class WorkspaceRecordsRepository(
     private val client: DynamoDbClient = DynamoConfig.client(),
     private val tableName: String = AppConfig.workspaceRecordsTable
-) {
-    fun create(record: RecordItem) {
+) : WorkspaceRecordsRepositoryPort {
+    override fun create(record: RecordItem) {
         val request = PutItemRequest.builder()
             .tableName(tableName)
             .item(toItem(record))
@@ -27,7 +27,7 @@ class WorkspaceRecordsRepository(
         client.putItem(request)
     }
 
-    fun update(record: RecordItem) {
+    override fun update(record: RecordItem) {
         val request = PutItemRequest.builder()
             .tableName(tableName)
             .item(toItem(record))
@@ -36,7 +36,7 @@ class WorkspaceRecordsRepository(
         client.putItem(request)
     }
 
-    fun get(workspaceId: String, recordKey: String): RecordItem? {
+    override fun get(workspaceId: String, recordKey: String): RecordItem? {
         val request = GetItemRequest.builder()
             .tableName(tableName)
             .key(
@@ -51,7 +51,7 @@ class WorkspaceRecordsRepository(
         return fromItem(response.item())
     }
 
-    fun delete(workspaceId: String, recordKey: String) {
+    override fun delete(workspaceId: String, recordKey: String) {
         val request = DeleteItemRequest.builder()
             .tableName(tableName)
             .key(
@@ -64,7 +64,7 @@ class WorkspaceRecordsRepository(
         client.deleteItem(request)
     }
 
-    fun queryByMonth(
+    override fun queryByMonth(
         workspaceMonth: String,
         recordType: RecordType?
     ): List<RecordItem> {
@@ -89,7 +89,7 @@ class WorkspaceRecordsRepository(
         return client.query(request).items().map(::fromItem)
     }
 
-    fun queryByQuarter(
+    override fun queryByQuarter(
         workspaceQuarter: String,
         recordType: RecordType?
     ): List<RecordItem> {
@@ -148,7 +148,7 @@ class WorkspaceRecordsRepository(
         )
     }
 
-    fun isConditionalFailure(ex: Exception): Boolean {
+    override fun isConditionalFailure(ex: Exception): Boolean {
         return ex is ConditionalCheckFailedException
     }
 }

@@ -1,6 +1,7 @@
 package autonomo.handler
 
 import autonomo.controller.RecordsController
+import autonomo.controller.SummariesController
 import autonomo.model.UserContext
 import autonomo.util.HttpResponse
 import autonomo.util.HttpResponses
@@ -11,6 +12,7 @@ import com.amazonaws.services.lambda.runtime.events.APIGatewayV2HTTPResponse
 
 class RecordsLambda : RequestHandler<APIGatewayV2HTTPEvent, APIGatewayV2HTTPResponse> {
     private val controller = RecordsController()
+    private val summariesController = SummariesController()
 
     override fun handleRequest(
         event: APIGatewayV2HTTPEvent,
@@ -51,6 +53,17 @@ class RecordsLambda : RequestHandler<APIGatewayV2HTTPEvent, APIGatewayV2HTTPResp
                     controller.updateRecord(workspaceId, segments[3], segments[4], segments[5], event.body, user)
                 segments.size == 6 && method == "DELETE" ->
                     controller.deleteRecord(workspaceId, segments[3], segments[4], segments[5], user)
+                else -> HttpResponses.notFound("Route not found")
+            }
+        }
+
+        if (segments.size == 4 && segments[0] == "workspaces" && segments[2] == "summaries") {
+            val workspaceId = segments.getOrNull(1)
+            return when {
+                segments[3] == "months" && method == "POST" ->
+                    summariesController.monthSummaries(workspaceId, event.body, user)
+                segments[3] == "quarters" && method == "POST" ->
+                    summariesController.quarterSummaries(workspaceId, event.body, user)
                 else -> HttpResponses.notFound("Route not found")
             }
         }

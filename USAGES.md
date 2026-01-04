@@ -90,9 +90,41 @@ Success response (200):
 { "items": [ /* record responses */ ] }
 ```
 
+## Summaries
+
+Summaries are computed using `autonomo-control-core` and the records stored in the workspace.
+
+### Monthly summaries
+
+- `POST /workspaces/{workspaceId}/summaries/months`
+
+Body: `autonomo.domain.Settings` (see schema in `README.md`).
+
+Success response (200):
+```json
+{
+  "settings": { /* echoed settings */ },
+  "items": [ /* MonthSummary */ ]
+}
+```
+
+### Quarterly summaries
+
+- `POST /workspaces/{workspaceId}/summaries/quarters`
+
+Body: `autonomo.domain.Settings` (see schema in `README.md`).
+
+Success response (200):
+```json
+{
+  "settings": { /* echoed settings */ },
+  "items": [ /* QuarterSummary */ ]
+}
+```
+
 ## Payload formats
 
-All Money values are JSON numbers. All Percentage values are JSON numbers in `[0,1]`.
+All Money values are JSON numbers. All rate/percentage values are JSON numbers in `[0,1]`.
 
 ### Invoice
 
@@ -204,6 +236,8 @@ Recommended routes:
 - `GET /health`
 - `POST /workspaces/{workspaceId}/records`
 - `GET /workspaces/{workspaceId}/records`
+- `POST /workspaces/{workspaceId}/summaries/months`
+- `POST /workspaces/{workspaceId}/summaries/quarters`
 - `GET /workspaces/{workspaceId}/records/{recordType}/{eventDate}/{recordId}`
 - `PUT /workspaces/{workspaceId}/records/{recordType}/{eventDate}/{recordId}`
 - `DELETE /workspaces/{workspaceId}/records/{recordType}/{eventDate}/{recordId}`
