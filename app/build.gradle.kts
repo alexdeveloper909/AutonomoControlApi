@@ -12,6 +12,28 @@ plugins {
 }
 
 repositories {
+    val githubOwner = (findProperty("github.owner") as String?) ?: System.getenv("GITHUB_OWNER")
+    val githubRepo = (findProperty("github.repo") as String?) ?: System.getenv("GITHUB_REPO")
+
+    val githubPackagesUrl =
+        if (!githubOwner.isNullOrBlank() && !githubRepo.isNullOrBlank()) {
+            "https://maven.pkg.github.com/$githubOwner/$githubRepo"
+        } else {
+            logger.warn(
+                "GitHub Packages repo not configured; set github.owner/github.repo in ~/.gradle/gradle.properties " +
+                    "or GITHUB_OWNER/GITHUB_REPO env vars (example: OWNER/REPO).",
+            )
+            "https://maven.pkg.github.com/OWNER/REPO"
+        }
+
+    maven {
+        url = uri(githubPackagesUrl)
+        credentials {
+            username = (findProperty("gpr.user") as String?) ?: System.getenv("GITHUB_ACTOR")
+            password = (findProperty("gpr.key") as String?) ?: System.getenv("GITHUB_TOKEN")
+        }
+    }
+
     // Use Maven Central for resolving dependencies.
     mavenCentral()
 }
@@ -24,6 +46,7 @@ dependencies {
     implementation("com.fasterxml.jackson.core:jackson-databind:2.17.2")
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.17.2")
     implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.17.2")
+    implementation("com.alex:autonomo-control-core:1.0.0")
 }
 
 testing {

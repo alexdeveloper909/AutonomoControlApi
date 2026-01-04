@@ -87,6 +87,30 @@ Environment variables:
 ./gradlew build
 ```
 
+## GitHub Packages dependency
+
+This project consumes `com.alex:autonomo-control-core:1.0.0` from GitHub Packages.
+
+Add credentials locally (do not commit) in `~/.gradle/gradle.properties`:
+
+```properties
+github.owner=YOUR_GITHUB_USERNAME_OR_ORG
+github.repo=YOUR_REPO_NAME
+gpr.user=YOUR_GITHUB_USERNAME
+gpr.key=YOUR_GITHUB_TOKEN
+```
+
+Alternatively, set environment variables:
+
+```bash
+export GITHUB_OWNER=YOUR_GITHUB_USERNAME_OR_ORG
+export GITHUB_REPO=YOUR_REPO_NAME
+export GITHUB_ACTOR=YOUR_GITHUB_USERNAME
+export GITHUB_TOKEN=YOUR_GITHUB_TOKEN
+```
+
+Token scopes: `read:packages` (and `repo` for private repos).
+
 ## Tests
 
 Unit tests cover controller validation and payload date derivation. Run them with:
