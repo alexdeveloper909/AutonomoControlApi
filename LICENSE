@@ -1,4 +1,40 @@
-All Rights Reserved.
+AutonomoControlApi Source-Available Proprietary License
 
-Unauthorized distribution, modification, commercial use.
-© 2026 Tokariev Oleksandr
+Copyright (c) 2026 Tokariev Oleksandr
+All rights reserved.
+
+This is proprietary software. It is source-available for transparency and review, but it is
+NOT "open source" as defined by the Open Source Initiative (OSI).
+
+Permission is granted to any person obtaining a copy of this repository (the “Software”) to:
+
+1) View, download, and use the Software solely for personal or internal evaluation of the
+   Software and/or the related service; and
+2) Run the Software internally for evaluation purposes only.
+
+The following are expressly NOT permitted without prior written permission from the copyright
+holder:
+
+- Redistribution of the Software (including source or compiled forms), in whole or in part;
+- Publishing, sublicensing, selling, licensing, renting, leasing, or otherwise making the
+  Software available to third parties as a product or service (including SaaS) other than the
+  copyright holder’s own service;
+- Creating or distributing derivative works or modifications;
+- Removing or altering copyright or license notices.
+
+You may not use any trademarks, service marks, or logos of the copyright holder except as
+required to comply with this license notice.
+
+Termination
+This license terminates automatically upon any breach. Upon termination, you must cease all
+use of the Software and destroy all copies under your control.
+
+Disclaimer of Warranty
+THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
+PURPOSE AND NONINFRINGEMENT.
+
+Limitation of Liability
+IN NO EVENT SHALL THE COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.

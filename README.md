@@ -2,6 +2,10 @@
 
 Kotlin serverless API for workspace-scoped financial records (Invoice, Expense, StatePayment, Transfer, BudgetEntry). The code is layered so Lambda handlers are thin and business logic is testable.
 
+## License
+
+This repository is **source-available** for transparency and review, but it is **proprietary** and **not open source**. See `LICENSE`.
+
 ## Architecture
 
 - `autonomo/handler` - AWS Lambda entrypoints (API Gateway v2 events)
