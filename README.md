@@ -94,11 +94,29 @@ Responses include `items` with `monthKey` (`YYYY-MM`) or `quarterKey` (`{ "year"
 
 Environment variables:
 
-- `ENV` (default `local`)
-- `WORKSPACE_RECORDS_TABLE` (default `workspace_records`)
-- `WORKSPACE_MEMBERS_TABLE` (default `workspace_members`)
+- `ENV` (default `local`; use `dev` / `prod` in deployed stages)
+- `DDB_TABLE_PREFIX` / `DYNAMODB_TABLE_PREFIX` / `AUTONOMO_TABLE_PREFIX` (optional; see below)
+- `WORKSPACE_RECORDS_TABLE` (optional; default `workspace_records` for local)
+- `WORKSPACE_MEMBERS_TABLE` (optional; default `workspace_members` for local)
+- `WORKSPACE_SETTINGS_TABLE` (optional; default `workspace_settings` for local)
+- `WORKSPACES_TABLE` (optional; default `workspaces` for local)
+- `USERS_TABLE` (optional; default `users` for local)
 - `DYNAMODB_ENDPOINT` (default `http://localhost:8000` for local DynamoDB)
 - `AWS_REGION` or `AWS_DEFAULT_REGION` (default `eu-west-1`)
+
+### Dev/prod table naming
+
+Recommended: set a single prefix via `DDB_TABLE_PREFIX` and let the service derive all table names:
+
+- `${DDB_TABLE_PREFIX}-users`
+- `${DDB_TABLE_PREFIX}-workspaces`
+- `${DDB_TABLE_PREFIX}-workspace_settings`
+- `${DDB_TABLE_PREFIX}-workspace_members`
+- `${DDB_TABLE_PREFIX}-workspace_records`
+
+If `ENV` is `dev` or `prod` and no prefix is provided, the default prefix is `autonomo-control-$ENV` (e.g. `autonomo-control-dev`).
+
+You can also override any table name explicitly via the per-table environment variables listed above (these take precedence over the prefix).
 
 ## Local development
 
