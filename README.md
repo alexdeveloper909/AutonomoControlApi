@@ -129,6 +129,34 @@ You can also override any table name explicitly via the per-table environment va
 ./gradlew build
 ```
 
+## Artifact (ZIP) upload to S3
+
+Build the Lambda artifact ZIP:
+
+```bash
+./gradlew :app:distZip
+```
+
+The ZIP is produced at `app/build/distributions/app.zip`.
+
+Upload it to the prepared artifacts bucket (`autonomo-control-api-artifacts-<account>-<region>`):
+
+```bash
+ARTIFACT_BUCKET="autonomo-control-api-artifacts-<account>-<region>"
+ARTIFACT_VERSION="1.0.0"   # or a git tag/commit SHA
+AWS_REGION="<region>"
+
+aws s3 cp app/build/distributions/app.zip \
+  "s3://${ARTIFACT_BUCKET}/autonomo-control-api/${ARTIFACT_VERSION}/app.zip" \
+  --region "$AWS_REGION"
+```
+
+Verify:
+
+```bash
+aws s3 ls "s3://${ARTIFACT_BUCKET}/autonomo-control-api/${ARTIFACT_VERSION}/" --region "$AWS_REGION"
+```
+
 ## GitHub Packages dependency
 
 This project consumes `com.alex:autonomo-control-core:1.0.0` from GitHub Packages.
