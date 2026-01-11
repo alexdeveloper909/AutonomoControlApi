@@ -21,6 +21,44 @@ Response:
 { "status": "ok" }
 ```
 
+### List workspaces
+
+- `GET /workspaces`
+
+Success response (200):
+```json
+{
+  "items": [
+    { "workspaceId": "ws-123", "name": "My workspace", "role": "OWNER", "status": "OWNER" }
+  ]
+}
+```
+
+### Create workspace
+
+- `POST /workspaces`
+
+Body:
+```json
+{
+  "name": "My workspace",
+  "settings": { /* autonomo.domain.Settings */ }
+}
+```
+
+Success response (201):
+```json
+{
+  "workspace": { "workspaceId": "ws-123", "name": "My workspace", "role": "OWNER", "status": "OWNER" },
+  "settings": { /* echoed settings */ }
+}
+```
+
+### Workspace settings
+
+- `GET /workspaces/{workspaceId}/settings`
+- `PUT /workspaces/{workspaceId}/settings`
+
 ### Create record
 
 - `POST /workspaces/{workspaceId}/records`

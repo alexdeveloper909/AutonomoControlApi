@@ -38,6 +38,10 @@ Payload conventions:
 All endpoints expect a valid Cognito JWT authorizer. The handler reads `sub` from JWT claims.
 
 - `GET /health`
+- `GET /workspaces`
+- `POST /workspaces`
+- `GET /workspaces/{workspaceId}/settings`
+- `PUT /workspaces/{workspaceId}/settings`
 - `POST /workspaces/{workspaceId}/summaries/months`
 - `POST /workspaces/{workspaceId}/summaries/quarters`
 - `POST /workspaces/{workspaceId}/records`
@@ -64,6 +68,46 @@ All endpoints expect a valid Cognito JWT authorizer. The handler reads `sub` fro
 - `PUT /workspaces/{workspaceId}/records/{recordType}/{eventDate}/{recordId}`
   - body uses the same schema as create; `recordType` must match the path
 - `DELETE /workspaces/{workspaceId}/records/{recordType}/{eventDate}/{recordId}`
+
+### Workspaces payloads
+
+List workspaces:
+
+- `GET /workspaces`
+
+Response:
+```json
+{
+  "items": [
+    { "workspaceId": "ws-123", "name": "My workspace", "role": "OWNER", "status": "OWNER" }
+  ]
+}
+```
+
+Create workspace (also creates owner membership + persists workspace settings):
+
+- `POST /workspaces`
+
+Body:
+```json
+{
+  "name": "My workspace",
+  "settings": {
+    "year": 2025,
+    "startDate": "2025-08-01",
+    "ivaStd": 0.21,
+    "irpfRate": 0.20,
+    "obligacion130": true,
+    "openingBalance": 200.00,
+    "expenseCategories": ["Software/SaaS", "Equipment", "Other"]
+  }
+}
+```
+
+Settings CRUD:
+
+- `GET /workspaces/{workspaceId}/settings`
+- `PUT /workspaces/{workspaceId}/settings` (body: `autonomo.domain.Settings`)
 
 ### Summaries payload
 
