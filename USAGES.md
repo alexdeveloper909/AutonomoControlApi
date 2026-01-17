@@ -112,20 +112,24 @@ Success response (204): empty body.
 
 - `GET /workspaces/{workspaceId}/records?month=YYYY-MM`
 - Optional filter: `recordType=INVOICE|EXPENSE|STATE_PAYMENT|TRANSFER|BUDGET`
+- Optional sort: `sort=eventDateDesc`
+- Optional pagination: `limit=<1..200>&nextToken=<opaque>` (when `nextToken` is provided, `limit` is required)
 
 Success response (200):
 ```json
-{ "items": [ /* record responses */ ] }
+{ "items": [ /* record responses */ ], "nextToken": "optional-opaque" }
 ```
 
 ### List records by quarter
 
 - `GET /workspaces/{workspaceId}/records?quarter=YYYY-Q1`
 - Optional filter: `recordType=INVOICE|EXPENSE|STATE_PAYMENT|TRANSFER|BUDGET`
+- Optional sort: `sort=eventDateDesc`
+- Optional pagination: `limit=<1..200>&nextToken=<opaque>` (when `nextToken` is provided, `limit` is required)
 
 Success response (200):
 ```json
-{ "items": [ /* record responses */ ] }
+{ "items": [ /* record responses */ ], "nextToken": "optional-opaque" }
 ```
 
 ## Summaries

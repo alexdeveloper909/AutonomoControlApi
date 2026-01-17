@@ -65,8 +65,8 @@ in the Lambda handler/controller, also add the corresponding route in the CDK st
       }
     }
     ```
-- `GET /workspaces/{workspaceId}/records?month=YYYY-MM&recordType=INVOICE`
-- `GET /workspaces/{workspaceId}/records?quarter=YYYY-Q1&recordType=EXPENSE`
+- `GET /workspaces/{workspaceId}/records?month=YYYY-MM&recordType=INVOICE&sort=eventDateDesc&limit=50&nextToken=...`
+- `GET /workspaces/{workspaceId}/records?quarter=YYYY-Q1&recordType=EXPENSE&sort=eventDateDesc&limit=50&nextToken=...`
 - `GET /workspaces/{workspaceId}/records/{recordType}/{eventDate}/{recordId}`
 - `PUT /workspaces/{workspaceId}/records/{recordType}/{eventDate}/{recordId}`
   - body uses the same schema as create; `recordType` must match the path

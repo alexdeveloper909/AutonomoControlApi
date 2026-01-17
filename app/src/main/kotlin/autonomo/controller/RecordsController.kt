@@ -4,6 +4,9 @@ import autonomo.model.RecordKey
 import autonomo.model.RecordRequest
 import autonomo.model.RecordType
 import autonomo.model.UserContext
+import autonomo.service.InvalidNextTokenException
+import autonomo.service.RecordsListOptions
+import autonomo.service.RecordsSort
 import autonomo.service.RecordsService
 import autonomo.service.RecordsServicePort
 import autonomo.service.WorkspaceAccessPort
@@ -123,23 +126,62 @@ class RecordsController(
                 return HttpResponses.badRequest("recordType is invalid")
             } else null
 
-        return when {
-            !month.isNullOrBlank() -> {
-                val yearMonth = parseMonth(month) ?: return HttpResponses.badRequest("month is invalid")
-                val response = service.listByMonth(workspaceId, yearMonth, recordType)
-                HttpResponses.ok(response)
+        val sort = parseSort(queryParams["sort"]) ?: if (queryParams.containsKey("sort")) {
+            return HttpResponses.badRequest("sort is invalid")
+        } else null
+
+        val limit = queryParams["limit"]?.let { parseLimit(it) }
+            ?: if (queryParams.containsKey("limit")) {
+                return HttpResponses.badRequest("limit is invalid")
+            } else null
+        val nextToken = queryParams["nextToken"]?.takeIf { it.isNotBlank() }
+
+        if (nextToken != null && limit == null) {
+            return HttpResponses.badRequest("limit is required when nextToken is provided")
+        }
+
+        val options = RecordsListOptions(sort = sort, limit = limit, nextToken = nextToken)
+
+        return runCatching {
+            when {
+                !month.isNullOrBlank() -> {
+                    val yearMonth = parseMonth(month) ?: return HttpResponses.badRequest("month is invalid")
+                    val response = service.listByMonth(workspaceId, yearMonth, recordType, options)
+                    HttpResponses.ok(response)
+                }
+                !quarter.isNullOrBlank() -> {
+                    val quarterKey = parseQuarter(quarter) ?: return HttpResponses.badRequest("quarter is invalid")
+                    val response = service.listByQuarter(workspaceId, quarterKey, recordType, options)
+                    HttpResponses.ok(response)
+                }
+                else -> HttpResponses.badRequest("month or quarter is required")
             }
-            !quarter.isNullOrBlank() -> {
-                val quarterKey = parseQuarter(quarter) ?: return HttpResponses.badRequest("quarter is invalid")
-                val response = service.listByQuarter(workspaceId, quarterKey, recordType)
-                HttpResponses.ok(response)
+        }.getOrElse { error ->
+            when (error) {
+                is InvalidNextTokenException -> HttpResponses.badRequest(error.message ?: "nextToken is invalid")
+                else -> throw error
             }
-            else -> HttpResponses.badRequest("month or quarter is required")
         }
     }
 
     private fun parseMonth(value: String): YearMonth? {
         return runCatching { YearMonth.parse(value) }.getOrNull()
+    }
+
+    private fun parseSort(value: String?): RecordsSort? {
+        if (value.isNullOrBlank()) return null
+        val normalized = value.lowercase().replace(Regex("[^a-z]"), "")
+        return when (normalized) {
+            "eventdatedesc" -> RecordsSort.EVENT_DATE_DESC
+            else -> null
+        }
+    }
+
+    private fun parseLimit(value: String): Int? {
+        val limit = value.toIntOrNull() ?: return null
+        if (limit < 1) return null
+        if (limit > 200) return null
+        return limit
     }
 
     private fun parseQuarter(value: String): String? {

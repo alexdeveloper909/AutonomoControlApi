@@ -33,5 +33,6 @@ data class RecordResponse(
 )
 
 data class RecordsResponse(
-    val items: List<RecordResponse>
+    val items: List<RecordResponse>,
+    val nextToken: String? = null
 )

@@ -14,6 +14,8 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.YearMonth
 import java.util.UUID
+import java.util.Base64
+import kotlin.math.min
 
 interface RecordsServicePort {
     fun createRecord(workspaceId: String, userId: String, request: RecordRequest): RecordResponse
@@ -27,9 +29,21 @@ interface RecordsServicePort {
     ): RecordResponse?
     fun getRecord(workspaceId: String, recordKey: String): RecordResponse?
     fun deleteRecord(workspaceId: String, recordKey: String)
-    fun listByMonth(workspaceId: String, month: YearMonth, recordType: RecordType?): RecordsResponse
-    fun listByQuarter(workspaceId: String, quarterKey: String, recordType: RecordType?): RecordsResponse
+    fun listByMonth(workspaceId: String, month: YearMonth, recordType: RecordType?, options: RecordsListOptions): RecordsResponse
+    fun listByQuarter(workspaceId: String, quarterKey: String, recordType: RecordType?, options: RecordsListOptions): RecordsResponse
 }
+
+data class RecordsListOptions(
+    val sort: RecordsSort? = null,
+    val limit: Int? = null,
+    val nextToken: String? = null
+)
+
+enum class RecordsSort {
+    EVENT_DATE_DESC
+}
+
+class InvalidNextTokenException(message: String) : RuntimeException(message)
 
 class RecordsService(
     private val repository: WorkspaceRecordsRepositoryPort = WorkspaceRecordsRepository()
@@ -108,19 +122,68 @@ class RecordsService(
     override fun listByMonth(
         workspaceId: String,
         month: YearMonth,
-        recordType: RecordType?
+        recordType: RecordType?,
+        options: RecordsListOptions
     ): RecordsResponse {
         val items = repository.queryByMonth(workspaceMonthKey(workspaceId, month.atDay(1)), recordType)
-        return RecordsResponse(items.map(::toResponse))
+        return toPagedResponse(items, options)
     }
 
     override fun listByQuarter(
         workspaceId: String,
         quarterKey: String,
-        recordType: RecordType?
+        recordType: RecordType?,
+        options: RecordsListOptions
     ): RecordsResponse {
         val items = repository.queryByQuarter(workspaceQuarterKey(workspaceId, quarterKey), recordType)
-        return RecordsResponse(items.map(::toResponse))
+        return toPagedResponse(items, options)
+    }
+
+    private fun toPagedResponse(items: List<RecordItem>, options: RecordsListOptions): RecordsResponse {
+        val sorted = when (options.sort) {
+            RecordsSort.EVENT_DATE_DESC ->
+                items.sortedWith(compareByDescending<RecordItem> { it.eventDate }.thenByDescending { it.recordKey })
+            null -> items
+        }
+
+        val startIndex = options.nextToken?.let { token ->
+            val recordKey = decodeToken(token)
+            val index = sorted.indexOfFirst { it.recordKey == recordKey }
+            if (index < 0) throw InvalidNextTokenException("nextToken is invalid")
+            index + 1
+        } ?: 0
+
+        if (startIndex >= sorted.size) {
+            return RecordsResponse(items = emptyList(), nextToken = null)
+        }
+
+        val limit = options.limit
+        val endExclusive = if (limit == null) {
+            sorted.size
+        } else {
+            min(startIndex + limit, sorted.size)
+        }
+        val page = sorted.subList(startIndex, endExclusive)
+
+        val nextTokenOut = if (limit != null && endExclusive < sorted.size) {
+            encodeToken(page.last().recordKey)
+        } else {
+            null
+        }
+
+        return RecordsResponse(items = page.map(::toResponse), nextToken = nextTokenOut)
+    }
+
+    private fun encodeToken(recordKey: String): String {
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(recordKey.toByteArray(Charsets.UTF_8))
+    }
+
+    private fun decodeToken(token: String): String {
+        return runCatching {
+            String(Base64.getUrlDecoder().decode(token), Charsets.UTF_8)
+        }.getOrElse {
+            throw InvalidNextTokenException("nextToken is invalid")
+        }
     }
 
     private fun toResponse(item: RecordItem): RecordResponse {

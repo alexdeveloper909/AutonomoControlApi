@@ -5,6 +5,7 @@ import autonomo.model.RecordResponse
 import autonomo.model.RecordType
 import autonomo.model.RecordsResponse
 import autonomo.model.UserContext
+import autonomo.service.RecordsListOptions
 import autonomo.service.RecordsServicePort
 import autonomo.service.WorkspaceAccessPort
 import autonomo.util.ApiError
@@ -89,6 +90,51 @@ class RecordsControllerTest {
     }
 
     @Test
+    fun listRecordsRejectsInvalidSort() {
+        val controller = RecordsController(FakeRecordsService(), FakeAccessService(true))
+
+        val response = controller.listRecords(
+            "ws-1",
+            mapOf("month" to "2024-06", "sort" to "nope"),
+            UserContext("user-1", "user@example.com")
+        )
+
+        assertEquals(400, response.statusCode)
+        val error = JsonSupport.mapper.readValue(response.body, ApiError::class.java)
+        assertEquals("sort is invalid", error.message)
+    }
+
+    @Test
+    fun listRecordsRejectsInvalidLimit() {
+        val controller = RecordsController(FakeRecordsService(), FakeAccessService(true))
+
+        val response = controller.listRecords(
+            "ws-1",
+            mapOf("month" to "2024-06", "limit" to "0"),
+            UserContext("user-1", "user@example.com")
+        )
+
+        assertEquals(400, response.statusCode)
+        val error = JsonSupport.mapper.readValue(response.body, ApiError::class.java)
+        assertEquals("limit is invalid", error.message)
+    }
+
+    @Test
+    fun listRecordsRejectsNextTokenWithoutLimit() {
+        val controller = RecordsController(FakeRecordsService(), FakeAccessService(true))
+
+        val response = controller.listRecords(
+            "ws-1",
+            mapOf("month" to "2024-06", "nextToken" to "abc"),
+            UserContext("user-1", "user@example.com")
+        )
+
+        assertEquals(400, response.statusCode)
+        val error = JsonSupport.mapper.readValue(response.body, ApiError::class.java)
+        assertEquals("limit is required when nextToken is provided", error.message)
+    }
+
+    @Test
     fun createRecordWithoutMembershipReturns403() {
         val controller = RecordsController(FakeRecordsService(), FakeAccessService(false))
 
@@ -120,11 +166,19 @@ class RecordsControllerTest {
 
         override fun deleteRecord(workspaceId: String, recordKey: String) = Unit
 
-        override fun listByMonth(workspaceId: String, month: YearMonth, recordType: RecordType?): RecordsResponse =
-            RecordsResponse(emptyList())
+        override fun listByMonth(
+            workspaceId: String,
+            month: YearMonth,
+            recordType: RecordType?,
+            options: RecordsListOptions
+        ): RecordsResponse = RecordsResponse(emptyList(), nextToken = null)
 
-        override fun listByQuarter(workspaceId: String, quarterKey: String, recordType: RecordType?): RecordsResponse =
-            RecordsResponse(emptyList())
+        override fun listByQuarter(
+            workspaceId: String,
+            quarterKey: String,
+            recordType: RecordType?,
+            options: RecordsListOptions
+        ): RecordsResponse = RecordsResponse(emptyList(), nextToken = null)
 
         private fun sampleResponse(workspaceId: String): RecordResponse {
             val payload = JsonSupport.mapper.readTree("{\"ok\":true}")
