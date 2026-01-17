@@ -178,13 +178,17 @@ You can also override any table name explicitly via the per-table environment va
 
 ## Artifact (ZIP) upload to S3
 
-Build the Lambda artifact ZIP:
+Build the Lambda artifact ZIP (Lambda classpath expects jars under `/lib`):
 
 ```bash
-./gradlew :app:distZip
+./gradlew :app:lambdaZip :app:verifyLambdaZip
 ```
 
 The ZIP is produced at `app/build/distributions/app.zip`.
+
+Note: `distZip` produces a Gradle application distribution (nested under `app/`) which is **not**
+AWS Lambda classpath-compatible and will fail with `ClassNotFoundException` for the handler. For
+clarity, `distZip` now outputs `app/build/distributions/app-dist.zip`.
 
 Upload it to the prepared artifacts bucket (`autonomo-control-api-artifacts-<account>-<region>`):
 

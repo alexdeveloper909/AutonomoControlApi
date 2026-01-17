@@ -6,9 +6,16 @@
  * This project uses @Incubating APIs which are subject to change.
  */
 
+import java.util.jar.JarInputStream
+import java.util.zip.ZipFile
+
 plugins {
     alias(libs.plugins.kotlin.jvm)
     application
+}
+
+tasks.named<Zip>("distZip") {
+    archiveFileName.set("app-dist.zip")
 }
 
 repositories {
@@ -68,4 +75,75 @@ java {
 
 application {
     mainClass = "autonomo.local.LocalRunnerKt"
+}
+
+val lambdaZip =
+    tasks.register<Zip>("lambdaZip") {
+        group = "distribution"
+        description =
+            "Build an AWS Lambda-compatible ZIP (all jars under /lib, including the app jar)."
+
+        val jarTask = tasks.named<Jar>("jar")
+        dependsOn(tasks.named("test"))
+        dependsOn(jarTask)
+
+        archiveFileName.set("app.zip")
+        destinationDirectory.set(layout.buildDirectory.dir("distributions"))
+        duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+
+        from(jarTask.flatMap { it.archiveFile }) {
+            into("lib")
+        }
+
+        from(
+            provider {
+                configurations.runtimeClasspath.get()
+                    .filter { it.isFile && it.name.endsWith(".jar") }
+                    .distinctBy { it.name }
+            },
+        ) {
+            into("lib")
+        }
+    }
+
+tasks.register("verifyLambdaZip") {
+    group = "verification"
+    description =
+        "Verifies that the Lambda ZIP contains the configured handler class on the Lambda classpath."
+    dependsOn("lambdaZip")
+
+    val zipFileProvider = layout.buildDirectory.file("distributions/app.zip")
+    inputs.file(zipFileProvider)
+
+    doLast {
+        val handlerClassFile = "autonomo/handler/RecordsLambda.class"
+        val zipFile = zipFileProvider.get().asFile
+        require(zipFile.exists()) { "Lambda ZIP not found: ${zipFile.absolutePath}" }
+
+        fun jarContainsClass(jarBytes: ByteArray): Boolean =
+            JarInputStream(jarBytes.inputStream()).use { jis ->
+                generateSequence { jis.nextJarEntry }
+                    .any { it.name == handlerClassFile }
+            }
+
+        ZipFile(zipFile).use { zf ->
+            val jarEntries =
+                zf.entries().asSequence()
+                    .filter { !it.isDirectory && it.name.endsWith(".jar") && it.name.startsWith("lib/") }
+                    .toList()
+
+            require(jarEntries.isNotEmpty()) {
+                "No jars found under /lib; Lambda classpath will not include nested jars."
+            }
+
+            val hasHandler =
+                jarEntries.any { entry ->
+                    zf.getInputStream(entry).use { jarContainsClass(it.readBytes()) }
+                }
+
+            require(hasHandler) {
+                "Handler class '$handlerClassFile' not found in jars under /lib (ZIP: ${zipFile.name})."
+            }
+        }
+    }
 }
