@@ -37,6 +37,9 @@ Payload conventions:
 
 All endpoints expect a valid Cognito JWT authorizer. The handler reads `sub` from JWT claims.
 
+Note: API Gateway routes are declared in `AutonomoControlCDK/` (HTTP API v2). If you add a new endpoint
+in the Lambda handler/controller, also add the corresponding route in the CDK stack, otherwise it won’t be reachable.
+
 - `GET /health`
 - `GET /workspaces`
 - `POST /workspaces`

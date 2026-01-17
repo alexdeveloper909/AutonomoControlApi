@@ -269,9 +269,13 @@ If no membership is found (or status is not allowed), the API returns `403`.
 
 The Lambda handler is a single integration with multiple routes. The route keys should match exactly.
 
-Recommended routes:
+Required routes (CDK deploys these explicitly; add more when you add new endpoints):
 
 - `GET /health`
+- `GET /workspaces`
+- `POST /workspaces`
+- `GET /workspaces/{workspaceId}/settings`
+- `PUT /workspaces/{workspaceId}/settings`
 - `POST /workspaces/{workspaceId}/records`
 - `GET /workspaces/{workspaceId}/records`
 - `POST /workspaces/{workspaceId}/summaries/months`
