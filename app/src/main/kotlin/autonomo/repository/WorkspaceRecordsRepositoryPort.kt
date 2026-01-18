@@ -8,8 +8,8 @@ interface WorkspaceRecordsRepositoryPort {
     fun update(record: RecordItem)
     fun get(workspaceId: String, recordKey: String): RecordItem?
     fun delete(workspaceId: String, recordKey: String)
+    fun queryByWorkspaceRecordKeyPrefix(workspaceId: String, recordKeyPrefix: String): List<RecordItem>
     fun queryByMonth(workspaceMonth: String, recordType: RecordType?): List<RecordItem>
     fun queryByQuarter(workspaceQuarter: String, recordType: RecordType?): List<RecordItem>
     fun isConditionalFailure(ex: Exception): Boolean
 }
-

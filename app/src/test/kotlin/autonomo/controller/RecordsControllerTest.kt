@@ -86,7 +86,52 @@ class RecordsControllerTest {
 
         assertEquals(400, response.statusCode)
         val error = JsonSupport.mapper.readValue(response.body, ApiError::class.java)
-        assertEquals("month or quarter is required", error.message)
+        assertEquals("month, quarter, or year is required", error.message)
+    }
+
+    @Test
+    fun listRecordsRejectsMultiplePeriodParams() {
+        val controller = RecordsController(FakeRecordsService(), FakeAccessService(true))
+
+        val response = controller.listRecords(
+            "ws-1",
+            mapOf("month" to "2024-06", "year" to "2024"),
+            UserContext("user-1", "user@example.com")
+        )
+
+        assertEquals(400, response.statusCode)
+        val error = JsonSupport.mapper.readValue(response.body, ApiError::class.java)
+        assertEquals("Use exactly one of month, quarter, or year", error.message)
+    }
+
+    @Test
+    fun listRecordsRejectsInvalidYear() {
+        val controller = RecordsController(FakeRecordsService(), FakeAccessService(true))
+
+        val response = controller.listRecords(
+            "ws-1",
+            mapOf("year" to "20XX"),
+            UserContext("user-1", "user@example.com")
+        )
+
+        assertEquals(400, response.statusCode)
+        val error = JsonSupport.mapper.readValue(response.body, ApiError::class.java)
+        assertEquals("year is invalid", error.message)
+    }
+
+    @Test
+    fun listRecordsAcceptsYear() {
+        val service = FakeRecordsService()
+        val controller = RecordsController(service, FakeAccessService(true))
+
+        val response = controller.listRecords(
+            "ws-1",
+            mapOf("year" to "2024"),
+            UserContext("user-1", "user@example.com")
+        )
+
+        assertEquals(200, response.statusCode)
+        assertEquals(2024, service.lastListYear)
     }
 
     @Test
@@ -146,6 +191,7 @@ class RecordsControllerTest {
     private class FakeRecordsService : RecordsServicePort {
         var lastWorkspaceId: String? = null
         var lastUserId: String? = null
+        var lastListYear: Int? = null
 
         override fun createRecord(workspaceId: String, userId: String, request: autonomo.model.RecordRequest): RecordResponse {
             lastWorkspaceId = workspaceId
@@ -179,6 +225,16 @@ class RecordsControllerTest {
             recordType: RecordType?,
             options: RecordsListOptions
         ): RecordsResponse = RecordsResponse(emptyList(), nextToken = null)
+
+        override fun listByYear(
+            workspaceId: String,
+            year: Int,
+            recordType: RecordType?,
+            options: RecordsListOptions
+        ): RecordsResponse {
+            lastListYear = year
+            return RecordsResponse(emptyList(), nextToken = null)
+        }
 
         private fun sampleResponse(workspaceId: String): RecordResponse {
             val payload = JsonSupport.mapper.readTree("{\"ok\":true}")

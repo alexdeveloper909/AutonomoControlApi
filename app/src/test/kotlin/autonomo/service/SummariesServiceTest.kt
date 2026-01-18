@@ -116,6 +116,9 @@ class SummariesServiceTest {
         override fun get(workspaceId: String, recordKey: String): RecordItem? = throw UnsupportedOperationException()
         override fun delete(workspaceId: String, recordKey: String) = throw UnsupportedOperationException()
 
+        override fun queryByWorkspaceRecordKeyPrefix(workspaceId: String, recordKeyPrefix: String): List<RecordItem> =
+            emptyList()
+
         override fun queryByMonth(workspaceMonth: String, recordType: RecordType?): List<RecordItem> =
             itemsByMonth[workspaceMonth].orEmpty()
 
@@ -150,4 +153,3 @@ class SummariesServiceTest {
         )
     }
 }
-

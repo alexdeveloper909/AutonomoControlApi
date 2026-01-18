@@ -67,6 +67,7 @@ in the Lambda handler/controller, also add the corresponding route in the CDK st
     ```
 - `GET /workspaces/{workspaceId}/records?month=YYYY-MM&recordType=INVOICE&sort=eventDateDesc&limit=50&nextToken=...`
 - `GET /workspaces/{workspaceId}/records?quarter=YYYY-Q1&recordType=EXPENSE&sort=eventDateDesc&limit=50&nextToken=...`
+- `GET /workspaces/{workspaceId}/records?year=YYYY&recordType=INVOICE&sort=eventDateDesc&limit=50&nextToken=...`
 - `GET /workspaces/{workspaceId}/records/{recordType}/{eventDate}/{recordId}`
 - `PUT /workspaces/{workspaceId}/records/{recordType}/{eventDate}/{recordId}`
   - body uses the same schema as create; `recordType` must match the path
@@ -136,6 +137,10 @@ Responses include `items` with `monthKey` (`YYYY-MM`) or `quarterKey` (`{ "year"
 - StatePayment: `paymentDate`
 - Transfer: `date`
 - BudgetEntry: `monthKey.firstDay()`
+
+Records listing:
+- Exactly one of `month=YYYY-MM`, `quarter=YYYY-Qx`, or `year=YYYY` is required.
+- `year` listing is implemented as a DynamoDB Query on the base table PK (`workspace_id`) with `begins_with(record_key, "<TYPE>#YYYY-")`. When `recordType` is omitted, the API performs one Query per record type and merges the results in-memory.
 
 ## Configuration
 

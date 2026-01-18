@@ -64,6 +64,24 @@ class WorkspaceRecordsRepository(
         client.deleteItem(request)
     }
 
+    override fun queryByWorkspaceRecordKeyPrefix(
+        workspaceId: String,
+        recordKeyPrefix: String
+    ): List<RecordItem> {
+        val request = QueryRequest.builder()
+            .tableName(tableName)
+            .keyConditionExpression("workspace_id = :pk AND begins_with(record_key, :prefix)")
+            .expressionAttributeValues(
+                mapOf(
+                    ":pk" to AttributeValue.builder().s(workspaceId).build(),
+                    ":prefix" to AttributeValue.builder().s(recordKeyPrefix).build()
+                )
+            )
+            .build()
+
+        return client.query(request).items().map(::fromItem)
+    }
+
     override fun queryByMonth(
         workspaceMonth: String,
         recordType: RecordType?

@@ -132,6 +132,18 @@ Success response (200):
 { "items": [ /* record responses */ ], "nextToken": "optional-opaque" }
 ```
 
+### List records by year
+
+- `GET /workspaces/{workspaceId}/records?year=YYYY`
+- Optional filter: `recordType=INVOICE|EXPENSE|STATE_PAYMENT|TRANSFER|BUDGET`
+- Optional sort: `sort=eventDateDesc`
+- Optional pagination: `limit=<1..200>&nextToken=<opaque>` (when `nextToken` is provided, `limit` is required)
+
+Success response (200):
+```json
+{ "items": [ /* record responses */ ], "nextToken": "optional-opaque" }
+```
+
 ## Summaries
 
 Summaries are computed using `autonomo-control-core` and the records stored in the workspace.

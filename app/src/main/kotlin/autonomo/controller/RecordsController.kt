@@ -14,6 +14,7 @@ import autonomo.service.WorkspaceAccessService
 import autonomo.util.HttpResponse
 import autonomo.util.HttpResponses
 import java.time.LocalDate
+import java.time.Year
 import java.time.YearMonth
 
 class RecordsController(
@@ -117,8 +118,10 @@ class RecordsController(
 
         val month = queryParams["month"]
         val quarter = queryParams["quarter"]
-        if (!month.isNullOrBlank() && !quarter.isNullOrBlank()) {
-            return HttpResponses.badRequest("Use either month or quarter")
+        val year = queryParams["year"]
+        val periodParamCount = listOf(month, quarter, year).count { !it.isNullOrBlank() }
+        if (periodParamCount > 1) {
+            return HttpResponses.badRequest("Use exactly one of month, quarter, or year")
         }
 
         val recordType = queryParams["recordType"]?.let { parseRecordType(it) }
@@ -154,7 +157,12 @@ class RecordsController(
                     val response = service.listByQuarter(workspaceId, quarterKey, recordType, options)
                     HttpResponses.ok(response)
                 }
-                else -> HttpResponses.badRequest("month or quarter is required")
+                !year.isNullOrBlank() -> {
+                    val yearValue = parseYear(year) ?: return HttpResponses.badRequest("year is invalid")
+                    val response = service.listByYear(workspaceId, yearValue, recordType, options)
+                    HttpResponses.ok(response)
+                }
+                else -> HttpResponses.badRequest("month, quarter, or year is required")
             }
         }.getOrElse { error ->
             when (error) {
@@ -166,6 +174,10 @@ class RecordsController(
 
     private fun parseMonth(value: String): YearMonth? {
         return runCatching { YearMonth.parse(value) }.getOrNull()
+    }
+
+    private fun parseYear(value: String): Int? {
+        return runCatching { Year.parse(value).value }.getOrNull()
     }
 
     private fun parseSort(value: String?): RecordsSort? {

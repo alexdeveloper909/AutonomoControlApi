@@ -31,6 +31,7 @@ interface RecordsServicePort {
     fun deleteRecord(workspaceId: String, recordKey: String)
     fun listByMonth(workspaceId: String, month: YearMonth, recordType: RecordType?, options: RecordsListOptions): RecordsResponse
     fun listByQuarter(workspaceId: String, quarterKey: String, recordType: RecordType?, options: RecordsListOptions): RecordsResponse
+    fun listByYear(workspaceId: String, year: Int, recordType: RecordType?, options: RecordsListOptions): RecordsResponse
 }
 
 data class RecordsListOptions(
@@ -136,6 +137,25 @@ class RecordsService(
         options: RecordsListOptions
     ): RecordsResponse {
         val items = repository.queryByQuarter(workspaceQuarterKey(workspaceId, quarterKey), recordType)
+        return toPagedResponse(items, options)
+    }
+
+    override fun listByYear(
+        workspaceId: String,
+        year: Int,
+        recordType: RecordType?,
+        options: RecordsListOptions
+    ): RecordsResponse {
+        val prefixes = if (recordType == null) {
+            RecordType.entries.map { "${it.name}#$year-" }
+        } else {
+            listOf("${recordType.name}#$year-")
+        }
+
+        val items = prefixes.flatMap { prefix ->
+            repository.queryByWorkspaceRecordKeyPrefix(workspaceId, prefix)
+        }
+
         return toPagedResponse(items, options)
     }
 

@@ -85,14 +85,99 @@ class RecordsServiceTest {
         }
     }
 
+    @Test
+    fun listByYearCanSortByEventDateDescending() {
+        val invoice = sampleItem(RecordType.INVOICE, LocalDate.parse("2024-06-20"), "rec-1")
+        val expense = sampleItem(RecordType.EXPENSE, LocalDate.parse("2024-06-10"), "rec-2")
+        val transfer = sampleItem(RecordType.TRANSFER, LocalDate.parse("2024-01-05"), "rec-3")
+
+        val repo = FakeRecordsRepository(
+            itemsByRecordKeyPrefix = mapOf(
+                "INVOICE#2024-" to listOf(invoice),
+                "EXPENSE#2024-" to listOf(expense),
+                "TRANSFER#2024-" to listOf(transfer)
+            )
+        )
+        val service = RecordsService(repo)
+
+        val response = service.listByYear(
+            workspaceId = "ws-1",
+            year = 2024,
+            recordType = null,
+            options = RecordsListOptions(sort = RecordsSort.EVENT_DATE_DESC)
+        )
+
+        assertEquals(listOf("rec-1", "rec-2", "rec-3"), response.items.map { it.recordId })
+    }
+
+    @Test
+    fun listByYearSupportsLimitAndNextToken() {
+        val invoice = sampleItem(RecordType.INVOICE, LocalDate.parse("2024-06-20"), "rec-1")
+        val expense = sampleItem(RecordType.EXPENSE, LocalDate.parse("2024-06-10"), "rec-2")
+        val transfer = sampleItem(RecordType.TRANSFER, LocalDate.parse("2024-01-05"), "rec-3")
+
+        val repo = FakeRecordsRepository(
+            itemsByRecordKeyPrefix = mapOf(
+                "INVOICE#2024-" to listOf(invoice),
+                "EXPENSE#2024-" to listOf(expense),
+                "TRANSFER#2024-" to listOf(transfer)
+            )
+        )
+        val service = RecordsService(repo)
+
+        val firstPage = service.listByYear(
+            workspaceId = "ws-1",
+            year = 2024,
+            recordType = null,
+            options = RecordsListOptions(sort = RecordsSort.EVENT_DATE_DESC, limit = 2)
+        )
+
+        assertEquals(listOf("rec-1", "rec-2"), firstPage.items.map { it.recordId })
+        assertNotNull(firstPage.nextToken)
+
+        val secondPage = service.listByYear(
+            workspaceId = "ws-1",
+            year = 2024,
+            recordType = null,
+            options = RecordsListOptions(sort = RecordsSort.EVENT_DATE_DESC, limit = 2, nextToken = firstPage.nextToken)
+        )
+
+        assertEquals(listOf("rec-3"), secondPage.items.map { it.recordId })
+        assertNull(secondPage.nextToken)
+    }
+
+    @Test
+    fun listByYearWithRecordTypeOnlyQueriesThatType() {
+        val invoice = sampleItem(RecordType.INVOICE, LocalDate.parse("2024-06-20"), "rec-1")
+        val repo = FakeRecordsRepository(itemsByRecordKeyPrefix = mapOf("INVOICE#2024-" to listOf(invoice)))
+        val service = RecordsService(repo)
+
+        service.listByYear(
+            workspaceId = "ws-1",
+            year = 2024,
+            recordType = RecordType.INVOICE,
+            options = RecordsListOptions()
+        )
+
+        assertEquals(listOf("INVOICE#2024-"), repo.queriedPrefixes)
+    }
+
     private class FakeRecordsRepository(
         private val itemsByMonth: Map<String, List<RecordItem>> = emptyMap(),
-        private val itemsByQuarter: Map<String, List<RecordItem>> = emptyMap()
+        private val itemsByQuarter: Map<String, List<RecordItem>> = emptyMap(),
+        private val itemsByRecordKeyPrefix: Map<String, List<RecordItem>> = emptyMap()
     ) : WorkspaceRecordsRepositoryPort {
+        val queriedPrefixes = mutableListOf<String>()
+
         override fun create(record: RecordItem) = throw UnsupportedOperationException()
         override fun update(record: RecordItem) = throw UnsupportedOperationException()
         override fun get(workspaceId: String, recordKey: String): RecordItem? = throw UnsupportedOperationException()
         override fun delete(workspaceId: String, recordKey: String) = throw UnsupportedOperationException()
+
+        override fun queryByWorkspaceRecordKeyPrefix(workspaceId: String, recordKeyPrefix: String): List<RecordItem> {
+            queriedPrefixes.add(recordKeyPrefix)
+            return itemsByRecordKeyPrefix[recordKeyPrefix].orEmpty()
+        }
 
         override fun queryByMonth(workspaceMonth: String, recordType: RecordType?): List<RecordItem> =
             itemsByMonth[workspaceMonth].orEmpty()
@@ -121,4 +206,3 @@ class RecordsServiceTest {
         )
     }
 }
-
