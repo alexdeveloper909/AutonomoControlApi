@@ -4,6 +4,8 @@ import autonomo.config.AppConfig
 import autonomo.config.DynamoConfig
 import autonomo.model.RecordItem
 import autonomo.model.RecordType
+import autonomo.security.SensitiveJsonCrypto
+import autonomo.security.SensitiveJsonCryptoProvider
 import java.time.Instant
 import java.time.LocalDate
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient
@@ -16,7 +18,8 @@ import software.amazon.awssdk.services.dynamodb.model.QueryRequest
 
 class WorkspaceRecordsRepository(
     private val client: DynamoDbClient = DynamoConfig.client(),
-    private val tableName: String = AppConfig.workspaceRecordsTable
+    private val tableName: String = AppConfig.workspaceRecordsTable,
+    private val sensitiveJsonCrypto: SensitiveJsonCrypto = SensitiveJsonCryptoProvider.instance
 ) : WorkspaceRecordsRepositoryPort {
     override fun create(record: RecordItem) {
         val request = PutItemRequest.builder()
@@ -133,13 +136,20 @@ class WorkspaceRecordsRepository(
     }
 
     private fun toItem(record: RecordItem): Map<String, AttributeValue> {
+        val payloadEncrypted = sensitiveJsonCrypto.encrypt(
+            context = "workspace_records",
+            pk = record.workspaceId,
+            sk = record.recordKey,
+            attributeName = "payload_json",
+            plaintextJson = record.payloadJson
+        )
         return mapOf(
             "workspace_id" to AttributeValue.builder().s(record.workspaceId).build(),
             "record_key" to AttributeValue.builder().s(record.recordKey).build(),
             "record_id" to AttributeValue.builder().s(record.recordId).build(),
             "record_type" to AttributeValue.builder().s(record.recordType.name).build(),
             "event_date" to AttributeValue.builder().s(record.eventDate.toString()).build(),
-            "payload_json" to AttributeValue.builder().s(record.payloadJson).build(),
+            "payload_json" to AttributeValue.builder().s(payloadEncrypted).build(),
             "workspace_month" to AttributeValue.builder().s(record.workspaceMonth).build(),
             "workspace_quarter" to AttributeValue.builder().s(record.workspaceQuarter).build(),
             "created_at" to AttributeValue.builder().s(record.createdAt.toString()).build(),
@@ -150,13 +160,22 @@ class WorkspaceRecordsRepository(
     }
 
     private fun fromItem(item: Map<String, AttributeValue>): RecordItem {
+        val workspaceId = item.getValue("workspace_id").s()
+        val recordKey = item.getValue("record_key").s()
+        val payloadJson = sensitiveJsonCrypto.decrypt(
+            context = "workspace_records",
+            pk = workspaceId,
+            sk = recordKey,
+            attributeName = "payload_json",
+            storedValue = item.getValue("payload_json").s()
+        )
         return RecordItem(
-            workspaceId = item.getValue("workspace_id").s(),
-            recordKey = item.getValue("record_key").s(),
+            workspaceId = workspaceId,
+            recordKey = recordKey,
             recordId = item.getValue("record_id").s(),
             recordType = RecordType.valueOf(item.getValue("record_type").s()),
             eventDate = LocalDate.parse(item.getValue("event_date").s()),
-            payloadJson = item.getValue("payload_json").s(),
+            payloadJson = payloadJson,
             workspaceMonth = item.getValue("workspace_month").s(),
             workspaceQuarter = item.getValue("workspace_quarter").s(),
             createdAt = Instant.parse(item.getValue("created_at").s()),

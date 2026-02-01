@@ -50,6 +50,7 @@ dependencies {
     implementation("com.amazonaws:aws-lambda-java-events:3.11.5")
     implementation("software.amazon.awssdk:dynamodb:2.25.66")
     implementation("software.amazon.awssdk:auth:2.25.66")
+    implementation("software.amazon.awssdk:kms:2.25.66")
     implementation("com.fasterxml.jackson.core:jackson-databind:2.17.2")
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.17.2")
     implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.17.2")
@@ -75,6 +76,19 @@ java {
 
 application {
     mainClass = "autonomo.local.LocalRunnerKt"
+}
+
+tasks.register<JavaExec>("migrateEncryptSensitiveJson") {
+    group = "application"
+    description =
+        "Encrypt existing DynamoDB sensitive JSON fields (workspace_records.payload_json, workspace_settings.settings_json)."
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("autonomo.cli.MigrateEncryptSensitiveJsonKt")
+
+    val rawArgs = (findProperty("cliArgs") as String?)?.trim().orEmpty()
+    if (rawArgs.isNotEmpty()) {
+        args = rawArgs.split(Regex("\\s+")).filter { it.isNotBlank() }
+    }
 }
 
 val lambdaZip =

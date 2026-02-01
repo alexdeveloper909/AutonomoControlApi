@@ -40,6 +40,13 @@ object AppConfig {
 
     val isLocal: Boolean = envLower == "local"
 
+    val envelopeKmsKeyArn: String? =
+        getenvNonBlank("ENVELOPE_KMS_KEY_ARN")
+            ?: getenvNonBlank("ENVELOPE_KMS_KEY_ID")
+
+    val sensitiveJsonEncryptionEnabled: Boolean =
+        getenvNonBlank("SENSITIVE_JSON_ENCRYPTION_ENABLED")?.let(::parseBoolean) ?: (envelopeKmsKeyArn != null)
+
     private fun resolveTableName(envVar: String, localDefault: String, suffix: String): String {
         val explicit = getenvNonBlank(envVar)
         if (explicit != null) return explicit
@@ -52,4 +59,12 @@ object AppConfig {
 
     private fun getenvNonBlank(name: String): String? =
         System.getenv(name)?.trim()?.takeIf { it.isNotEmpty() }
+
+    private fun parseBoolean(value: String): Boolean {
+        return when (value.trim().lowercase()) {
+            "1", "true", "yes", "y", "on" -> true
+            "0", "false", "no", "n", "off" -> false
+            else -> throw IllegalArgumentException("invalid boolean value: '$value'")
+        }
+    }
 }

@@ -166,6 +166,8 @@ Environment variables:
 - `USERS_TABLE` (optional; default `users` for local)
 - `DYNAMODB_ENDPOINT` (default `http://localhost:8000` for local DynamoDB)
 - `AWS_REGION` or `AWS_DEFAULT_REGION` (default `eu-west-1`)
+- `ENVELOPE_KMS_KEY_ARN` (KMS CMK ARN/id used for envelope encryption of sensitive JSON fields)
+- `SENSITIVE_JSON_ENCRYPTION_ENABLED` (optional; `true`/`false`; defaults to enabled when `ENVELOPE_KMS_KEY_ARN` is set)
 
 ### Dev/prod table naming
 
@@ -185,6 +187,31 @@ You can also override any table name explicitly via the per-table environment va
 
 - Use DynamoDB Local and set `ENV=local` and `DYNAMODB_ENDPOINT`.
 - `RecordsLambda` can be invoked by API Gateway or locally by constructing an `APIGatewayV2HTTPEvent` in tests.
+
+## Sensitive JSON encryption (DynamoDB)
+
+To avoid storing readable financial data in DynamoDB console / backups, the API transparently encrypts:
+
+- `workspace_records.payload_json`
+- `workspace_settings.settings_json`
+
+Encryption uses envelope encryption (KMS `GenerateDataKey` / `Decrypt` + local AES-256-GCM). The DynamoDB
+attribute value becomes a string starting with `ENC1|...` (ciphertext + encrypted data key), while the API
+continues to return plaintext JSON to clients.
+
+### Migrating existing data
+
+After deploying the updated Lambda + KMS key, migrate existing plaintext items:
+
+```bash
+# Dry run (shows counts only)
+ENV=dev DDB_TABLE_PREFIX=autonomo-control-dev ENVELOPE_KMS_KEY_ARN="arn:aws:kms:..." SENSITIVE_JSON_ENCRYPTION_ENABLED=true \
+  ./scripts/migrate_encrypt_sensitive_json.sh --dry-run --tables all
+
+# Apply (writes back encrypted values)
+ENV=dev DDB_TABLE_PREFIX=autonomo-control-dev ENVELOPE_KMS_KEY_ARN="arn:aws:kms:..." SENSITIVE_JSON_ENCRYPTION_ENABLED=true \
+  ./scripts/migrate_encrypt_sensitive_json.sh --apply --tables all
+```
 
 ## Build
 

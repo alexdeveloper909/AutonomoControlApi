@@ -4,6 +4,8 @@ import autonomo.config.AppConfig
 import autonomo.config.DynamoConfig
 import autonomo.config.JsonSupport
 import autonomo.domain.Settings
+import autonomo.security.SensitiveJsonCrypto
+import autonomo.security.SensitiveJsonCryptoProvider
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue
 import software.amazon.awssdk.services.dynamodb.model.GetItemRequest
@@ -17,7 +19,8 @@ interface WorkspaceSettingsRepositoryPort {
 
 class WorkspaceSettingsRepository(
     private val client: DynamoDbClient = DynamoConfig.client(),
-    private val tableName: String = AppConfig.workspaceSettingsTable
+    private val tableName: String = AppConfig.workspaceSettingsTable,
+    private val sensitiveJsonCrypto: SensitiveJsonCrypto = SensitiveJsonCryptoProvider.instance
 ) : WorkspaceSettingsRepositoryPort {
     override fun getSettings(workspaceId: String): Settings? {
         val response = client.getItem(
@@ -31,15 +34,30 @@ class WorkspaceSettingsRepository(
                 .build()
         )
         if (!response.hasItem()) return null
-        val json = response.item()["settings_json"]?.s() ?: return null
+        val stored = response.item()["settings_json"]?.s() ?: return null
+        val json = sensitiveJsonCrypto.decrypt(
+            context = "workspace_settings",
+            pk = workspaceId,
+            sk = null,
+            attributeName = "settings_json",
+            storedValue = stored
+        )
         return runCatching { JsonSupport.mapper.readValue(json, Settings::class.java) }.getOrNull()
     }
 
     override fun putSettings(workspaceId: String, settings: Settings, updatedBy: String) {
         val now = Instant.now().toString()
+        val plaintextJson = JsonSupport.mapper.writeValueAsString(settings)
+        val encryptedJson = sensitiveJsonCrypto.encrypt(
+            context = "workspace_settings",
+            pk = workspaceId,
+            sk = null,
+            attributeName = "settings_json",
+            plaintextJson = plaintextJson
+        )
         val item = mapOf(
             "workspace_id" to AttributeValue.builder().s(workspaceId).build(),
-            "settings_json" to AttributeValue.builder().s(JsonSupport.mapper.writeValueAsString(settings)).build(),
+            "settings_json" to AttributeValue.builder().s(encryptedJson).build(),
             "updated_at" to AttributeValue.builder().s(now).build(),
             "updated_by" to AttributeValue.builder().s(updatedBy).build()
         )
@@ -51,4 +69,3 @@ class WorkspaceSettingsRepository(
         )
     }
 }
-
