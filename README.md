@@ -211,6 +211,9 @@ ENV=dev DDB_TABLE_PREFIX=autonomo-control-dev ENVELOPE_KMS_KEY_ARN="arn:aws:kms:
 # Apply (writes back encrypted values)
 ENV=dev DDB_TABLE_PREFIX=autonomo-control-dev ENVELOPE_KMS_KEY_ARN="arn:aws:kms:..." SENSITIVE_JSON_ENCRYPTION_ENABLED=true \
   ./scripts/migrate_encrypt_sensitive_json.sh --apply --tables all
+  
+# static profile
+- AWS_PROFILE=tokarevalex ENV=dev DDB_TABLE_PREFIX=autonomo-control-dev ENVELOPE_KMS_KEY_ARN="arn:aws:kms:..." SENSITIVE_JSON_ENCRYPTION_ENABLED=true ./scripts/migrate_encrypt_sensitive_json.sh --dry-run --tables all
 ```
 
 ## Build
