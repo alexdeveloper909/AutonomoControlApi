@@ -78,7 +78,7 @@ class RecordsController(
     ): HttpResponse {
         if (workspaceId.isNullOrBlank()) return HttpResponses.badRequest("workspaceId is required")
         val caller = user ?: return HttpResponses.unauthorized()
-        ensureWriteAccess(workspaceId, caller)?.let { return it }
+        ensureAccess(workspaceId, caller)?.let { return it }
         val recordType = parseRecordType(recordTypeParam) ?: return HttpResponses.badRequest("recordType is invalid")
         val eventDate = parseEventDate(eventDateParam) ?: return HttpResponses.badRequest("eventDate is invalid")
         if (recordId.isNullOrBlank()) return HttpResponses.badRequest("recordId is required")
@@ -97,7 +97,7 @@ class RecordsController(
     ): HttpResponse {
         if (workspaceId.isNullOrBlank()) return HttpResponses.badRequest("workspaceId is required")
         val caller = user ?: return HttpResponses.unauthorized()
-        ensureAccess(workspaceId, caller)?.let { return it }
+        ensureWriteAccess(workspaceId, caller)?.let { return it }
         val recordType = parseRecordType(recordTypeParam) ?: return HttpResponses.badRequest("recordType is invalid")
         val eventDate = parseEventDate(eventDateParam) ?: return HttpResponses.badRequest("eventDate is invalid")
         if (recordId.isNullOrBlank()) return HttpResponses.badRequest("recordId is required")
