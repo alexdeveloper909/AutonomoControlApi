@@ -40,6 +40,8 @@ All endpoints expect a valid Cognito JWT authorizer. The handler reads `sub` fro
 Note: API Gateway routes are declared in `AutonomoControlCDK/` (HTTP API v2). If you add a new endpoint
 in the Lambda handler/controller, also add the corresponding route in the CDK stack, otherwise it won’t be reachable.
 
+- `GET /users/me` (read current user profile/settings)
+- `PUT /users/me` (update current user settings; currently supports `preferredLanguage`)
 - `GET /health`
 - `GET /workspaces`
 - `POST /workspaces`

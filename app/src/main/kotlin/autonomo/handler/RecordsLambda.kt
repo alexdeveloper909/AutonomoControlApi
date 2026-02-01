@@ -2,6 +2,7 @@ package autonomo.handler
 
 import autonomo.controller.RecordsController
 import autonomo.controller.SummariesController
+import autonomo.controller.UsersController
 import autonomo.controller.WorkspaceSettingsController
 import autonomo.controller.WorkspacesController
 import autonomo.model.UserContext
@@ -17,6 +18,7 @@ class RecordsLambda : RequestHandler<APIGatewayV2HTTPEvent, APIGatewayV2HTTPResp
     private val summariesController = SummariesController()
     private val workspacesController = WorkspacesController()
     private val workspaceSettingsController = WorkspaceSettingsController()
+    private val usersController = UsersController()
 
     override fun handleRequest(
         event: APIGatewayV2HTTPEvent,
@@ -42,6 +44,14 @@ class RecordsLambda : RequestHandler<APIGatewayV2HTTPEvent, APIGatewayV2HTTPResp
 
         if (segments.size == 1 && segments[0] == "health") {
             return HttpResponses.ok(mapOf("status" to "ok"))
+        }
+
+        if (segments.size == 2 && segments[0] == "users" && segments[1] == "me") {
+            return when (method) {
+                "GET" -> usersController.getMe(user)
+                "PUT" -> usersController.putMe(event.body, user)
+                else -> HttpResponses.notFound("Route not found")
+            }
         }
 
         if (segments.size == 1 && segments[0] == "workspaces") {
