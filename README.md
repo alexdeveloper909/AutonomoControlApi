@@ -45,6 +45,7 @@ in the Lambda handler/controller, also add the corresponding route in the CDK st
 - `GET /health`
 - `GET /workspaces`
 - `POST /workspaces`
+- `POST /workspaces/{workspaceId}/share` (share workspace read-only by email)
 - `GET /workspaces/{workspaceId}/settings`
 - `PUT /workspaces/{workspaceId}/settings`
 - `POST /workspaces/{workspaceId}/summaries/months`
@@ -85,7 +86,15 @@ Response:
 ```json
 {
   "items": [
-    { "workspaceId": "ws-123", "name": "My workspace", "role": "OWNER", "status": "OWNER" }
+    {
+      "workspaceId": "ws-123",
+      "name": "My workspace",
+      "role": "OWNER",
+      "status": "OWNER",
+      "accessMode": "READ_WRITE",
+      "sharedByMe": true,
+      "sharedWithMe": false
+    }
   ]
 }
 ```

@@ -24,7 +24,7 @@ class RecordsController(
     fun createRecord(workspaceId: String?, body: String?, user: UserContext?): HttpResponse {
         if (workspaceId.isNullOrBlank()) return HttpResponses.badRequest("workspaceId is required")
         val caller = user ?: return HttpResponses.unauthorized()
-        ensureAccess(workspaceId, caller)?.let { return it }
+        ensureWriteAccess(workspaceId, caller)?.let { return it }
         if (body.isNullOrBlank()) return HttpResponses.badRequest("body is required")
 
         return runCatching {
@@ -49,7 +49,7 @@ class RecordsController(
     ): HttpResponse {
         if (workspaceId.isNullOrBlank()) return HttpResponses.badRequest("workspaceId is required")
         val caller = user ?: return HttpResponses.unauthorized()
-        ensureAccess(workspaceId, caller)?.let { return it }
+        ensureWriteAccess(workspaceId, caller)?.let { return it }
         if (body.isNullOrBlank()) return HttpResponses.badRequest("body is required")
         val recordType = parseRecordType(recordTypeParam) ?: return HttpResponses.badRequest("recordType is invalid")
         val eventDate = parseEventDate(eventDateParam) ?: return HttpResponses.badRequest("eventDate is invalid")
@@ -78,7 +78,7 @@ class RecordsController(
     ): HttpResponse {
         if (workspaceId.isNullOrBlank()) return HttpResponses.badRequest("workspaceId is required")
         val caller = user ?: return HttpResponses.unauthorized()
-        ensureAccess(workspaceId, caller)?.let { return it }
+        ensureWriteAccess(workspaceId, caller)?.let { return it }
         val recordType = parseRecordType(recordTypeParam) ?: return HttpResponses.badRequest("recordType is invalid")
         val eventDate = parseEventDate(eventDateParam) ?: return HttpResponses.badRequest("eventDate is invalid")
         if (recordId.isNullOrBlank()) return HttpResponses.badRequest("recordId is required")
@@ -215,6 +215,14 @@ class RecordsController(
             null
         } else {
             HttpResponses.forbidden("User is not a member of the workspace")
+        }
+    }
+
+    private fun ensureWriteAccess(workspaceId: String, user: UserContext): HttpResponse? {
+        return if (access.canWrite(workspaceId, user)) {
+            null
+        } else {
+            HttpResponses.forbidden("Workspace is read-only for this user")
         }
     }
 

@@ -6,7 +6,10 @@ data class WorkspaceSummary(
     val workspaceId: String,
     val name: String,
     val role: String?,
-    val status: String?
+    val status: String?,
+    val accessMode: String,
+    val sharedByMe: Boolean = false,
+    val sharedWithMe: Boolean = false
 )
 
 data class WorkspacesListResponse(
@@ -23,3 +26,13 @@ data class WorkspaceCreateResponse(
     val settings: Settings
 )
 
+data class WorkspaceShareRequest(
+    val email: String
+)
+
+data class WorkspaceShareResponse(
+    val workspaceId: String,
+    val emailLower: String,
+    val role: String,
+    val status: String
+)

@@ -281,6 +281,15 @@ Before any record CRUD, the handler verifies the caller is a member of the works
 
 If no membership is found (or status is not allowed), the API returns `403`.
 
+### Read-only access (shared workspaces)
+
+The API supports read-only sharing via email membership rows:
+
+- Share row: `PK = workspace_id`, `SK = EMAIL#<lowercased_email>`, `role = READER`, `status = ACTIVE`
+- Read operations (`GET` list/get records, `POST` summaries, `GET` settings) require membership (`canAccess`).
+- Write operations (`POST`/`PUT`/`DELETE` records, `PUT` settings) additionally require a write-capable role (`OWNER`/`MEMBER`).
+  - If the workspace is read-only for the caller, the API returns `403` with `"Workspace is read-only for this user"`.
+
 ## API Gateway wiring (HTTP API v2)
 
 The Lambda handler is a single integration with multiple routes. The route keys should match exactly.
@@ -292,6 +301,7 @@ Required routes (CDK deploys these explicitly; add more when you add new endpoin
 - `POST /workspaces`
 - `GET /workspaces/{workspaceId}/settings`
 - `PUT /workspaces/{workspaceId}/settings`
+- `POST /workspaces/{workspaceId}/share`
 - `POST /workspaces/{workspaceId}/records`
 - `GET /workspaces/{workspaceId}/records`
 - `POST /workspaces/{workspaceId}/summaries/months`

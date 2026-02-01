@@ -31,14 +31,27 @@ class WorkspacesService(
         val items = workspaces.batchGet(workspaceIds)
         val memberByWorkspace = memberItems.associateBy { it.workspaceId }
 
+        val sharedByWorkspaceForOwners = memberItems
+            .filter { isOwnerMembership(it) }
+            .associate { ownerMembership ->
+                ownerMembership.workspaceId to hasActiveReadOnlyMembers(ownerMembership.workspaceId)
+            }
+
         val summaries = items
             .map { ws ->
                 val membership = memberByWorkspace[ws.workspaceId]
+                val role = membership?.role?.uppercase()
+                val accessMode = if (role == "READER") "READ_ONLY" else "READ_WRITE"
+                val sharedWithMe = role == "READER"
+                val sharedByMe = isOwnerMembership(membership) && (sharedByWorkspaceForOwners[ws.workspaceId] == true)
                 WorkspaceSummary(
                     workspaceId = ws.workspaceId,
                     name = ws.name,
                     role = membership?.role,
-                    status = membership?.status
+                    status = membership?.status,
+                    accessMode = accessMode,
+                    sharedByMe = sharedByMe,
+                    sharedWithMe = sharedWithMe
                 )
             }
             .sortedBy { it.name.lowercase() }
@@ -72,7 +85,10 @@ class WorkspacesService(
                 workspaceId = workspaceId,
                 name = name,
                 role = "OWNER",
-                status = "OWNER"
+                status = "OWNER",
+                accessMode = "READ_WRITE",
+                sharedByMe = false,
+                sharedWithMe = false
             ),
             settings = request.settings
         )
@@ -96,8 +112,24 @@ class WorkspacesService(
         return status in ACTIVE_STATUSES
     }
 
+    private fun hasActiveReadOnlyMembers(workspaceId: String): Boolean {
+        val members = memberships.listByWorkspaceId(workspaceId)
+        return members.any { m ->
+            val role = m.role?.uppercase()
+            val status = m.status?.uppercase()
+            val isActive = status == null || status in ACTIVE_STATUSES
+            isActive && role == "READER"
+        }
+    }
+
+    private fun isOwnerMembership(member: WorkspaceMember?): Boolean {
+        if (member == null) return false
+        val role = member.role?.uppercase()
+        val status = member.status?.uppercase()
+        return role == "OWNER" || status == "OWNER"
+    }
+
     private companion object {
         val ACTIVE_STATUSES = setOf("ACTIVE", "ACCEPTED", "OWNER")
     }
 }
-

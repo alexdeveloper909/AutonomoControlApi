@@ -3,6 +3,7 @@ package autonomo.handler
 import autonomo.controller.RecordsController
 import autonomo.controller.SummariesController
 import autonomo.controller.UsersController
+import autonomo.controller.WorkspaceSharingController
 import autonomo.controller.WorkspaceSettingsController
 import autonomo.controller.WorkspacesController
 import autonomo.model.UserContext
@@ -18,6 +19,7 @@ class RecordsLambda : RequestHandler<APIGatewayV2HTTPEvent, APIGatewayV2HTTPResp
     private val summariesController = SummariesController()
     private val workspacesController = WorkspacesController()
     private val workspaceSettingsController = WorkspaceSettingsController()
+    private val workspaceSharingController = WorkspaceSharingController()
     private val usersController = UsersController()
 
     override fun handleRequest(
@@ -67,6 +69,14 @@ class RecordsLambda : RequestHandler<APIGatewayV2HTTPEvent, APIGatewayV2HTTPResp
             return when (method) {
                 "GET" -> workspaceSettingsController.getSettings(workspaceId, user)
                 "PUT" -> workspaceSettingsController.putSettings(workspaceId, event.body, user)
+                else -> HttpResponses.notFound("Route not found")
+            }
+        }
+
+        if (segments.size == 3 && segments[0] == "workspaces" && segments[2] == "share") {
+            val workspaceId = segments.getOrNull(1)
+            return when (method) {
+                "POST" -> workspaceSharingController.shareReadOnly(workspaceId, event.body, user)
                 else -> HttpResponses.notFound("Route not found")
             }
         }

@@ -17,6 +17,7 @@ interface WorkspaceMembersRepositoryPort {
 interface WorkspaceMembershipsRepositoryPort {
     fun listByUserId(userId: String): List<WorkspaceMember>
     fun listByEmail(emailLower: String): List<WorkspaceMember>
+    fun listByWorkspaceId(workspaceId: String): List<WorkspaceMember>
     fun putMember(workspaceId: String, memberKey: String, userId: String?, emailLower: String?, role: String?, status: String?)
 }
 
@@ -72,6 +73,20 @@ class WorkspaceMembersRepository(
             .expressionAttributeValues(
                 mapOf(
                     ":e" to AttributeValue.builder().s(emailLower.lowercase()).build()
+                )
+            )
+            .build()
+        val response = client.query(request)
+        return response.items().map { fromItem(it) }
+    }
+
+    override fun listByWorkspaceId(workspaceId: String): List<WorkspaceMember> {
+        val request = QueryRequest.builder()
+            .tableName(tableName)
+            .keyConditionExpression("workspace_id = :w")
+            .expressionAttributeValues(
+                mapOf(
+                    ":w" to AttributeValue.builder().s(workspaceId).build()
                 )
             )
             .build()

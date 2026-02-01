@@ -25,7 +25,7 @@ class WorkspaceSettingsController(
     fun putSettings(workspaceId: String?, body: String?, user: UserContext?): HttpResponse {
         if (workspaceId.isNullOrBlank()) return HttpResponses.badRequest("workspaceId is required")
         val caller = user ?: return HttpResponses.unauthorized()
-        ensureAccess(workspaceId, caller)?.let { return it }
+        ensureWriteAccess(workspaceId, caller)?.let { return it }
         val settings = parseSettings(body) ?: return HttpResponses.badRequest("Invalid settings")
 
         service.putSettings(workspaceId, settings, caller.userId)
@@ -44,5 +44,12 @@ class WorkspaceSettingsController(
             HttpResponses.forbidden("User is not a member of the workspace")
         }
     }
-}
 
+    private fun ensureWriteAccess(workspaceId: String, user: UserContext): HttpResponse? {
+        return if (access.canWrite(workspaceId, user)) {
+            null
+        } else {
+            HttpResponses.forbidden("Workspace is read-only for this user")
+        }
+    }
+}

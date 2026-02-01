@@ -255,5 +255,11 @@ class RecordsControllerTest {
 
     private class FakeAccessService(private val allowed: Boolean) : WorkspaceAccessPort {
         override fun canAccess(workspaceId: String, user: UserContext): Boolean = allowed
+
+        override fun canWrite(workspaceId: String, user: UserContext): Boolean = allowed
+
+        override fun canAdmin(workspaceId: String, user: UserContext): Boolean = allowed
+
+        override fun getActiveMember(workspaceId: String, user: UserContext) = null
     }
 }

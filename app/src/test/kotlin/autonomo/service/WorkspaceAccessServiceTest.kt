@@ -23,6 +23,8 @@ class WorkspaceAccessServiceTest {
         val service = WorkspaceAccessService(repo)
 
         assertTrue(service.canAccess("ws-1", UserContext("user-1", null)))
+        assertTrue(service.canWrite("ws-1", UserContext("user-1", null)))
+        assertFalse(service.canAdmin("ws-1", UserContext("user-1", null)))
     }
 
     @Test
@@ -40,6 +42,7 @@ class WorkspaceAccessServiceTest {
         val service = WorkspaceAccessService(repo)
 
         assertFalse(service.canAccess("ws-1", UserContext("user-1", null)))
+        assertFalse(service.canWrite("ws-1", UserContext("user-1", null)))
     }
 
     @Test
@@ -57,6 +60,7 @@ class WorkspaceAccessServiceTest {
         val service = WorkspaceAccessService(repo)
 
         assertTrue(service.canAccess("ws-1", UserContext("user-2", "User@Example.com")))
+        assertTrue(service.canWrite("ws-1", UserContext("user-2", "User@Example.com")))
     }
 
     @Test
@@ -64,6 +68,25 @@ class WorkspaceAccessServiceTest {
         val service = WorkspaceAccessService(FakeMembersRepository())
 
         assertFalse(service.canAccess("ws-1", UserContext("user-1", "user@example.com")))
+        assertFalse(service.canWrite("ws-1", UserContext("user-1", "user@example.com")))
+    }
+
+    @Test
+    fun readOnlyRoleAllowsReadButDeniesWrite() {
+        val repo = FakeMembersRepository(
+            memberByEmail = WorkspaceMember(
+                workspaceId = "ws-1",
+                memberKey = "EMAIL#user@example.com",
+                userId = null,
+                emailLower = "user@example.com",
+                role = "READER",
+                status = "ACTIVE"
+            )
+        )
+        val service = WorkspaceAccessService(repo)
+
+        assertTrue(service.canAccess("ws-1", UserContext("user-2", "user@example.com")))
+        assertFalse(service.canWrite("ws-1", UserContext("user-2", "user@example.com")))
     }
 
     private class FakeMembersRepository(
