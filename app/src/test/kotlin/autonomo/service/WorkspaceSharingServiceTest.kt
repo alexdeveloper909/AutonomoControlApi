@@ -71,6 +71,10 @@ class WorkspaceSharingServiceTest {
         override fun deleteMember(workspaceId: String, memberKey: String) = Unit
 
         override fun deleteByWorkspaceId(workspaceId: String) = Unit
+
+        override fun setTtlByWorkspaceId(workspaceId: String, ttlEpoch: Long) = Unit
+
+        override fun clearTtlByWorkspaceId(workspaceId: String) = Unit
     }
 
     private class FakeAccess(private val canAdmin: Boolean) : WorkspaceAccessPort {

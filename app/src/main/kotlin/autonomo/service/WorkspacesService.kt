@@ -15,12 +15,14 @@ import autonomo.repository.WorkspacesRepositoryPort
 import autonomo.repository.WorkspaceSettingsRepository
 import autonomo.repository.WorkspaceSettingsRepositoryPort
 import software.amazon.awssdk.services.dynamodb.model.ConditionalCheckFailedException
+import java.time.Instant
 import java.util.UUID
 
 interface WorkspacesServicePort {
-    fun listWorkspaces(user: UserContext): WorkspacesListResponse
+    fun listWorkspaces(user: UserContext, includeDeleted: Boolean = false): WorkspacesListResponse
     fun createWorkspace(user: UserContext, request: WorkspaceCreateRequest): WorkspaceCreateResponse
     fun deleteWorkspace(user: UserContext, workspaceId: String): Boolean
+    fun restoreWorkspace(user: UserContext, workspaceId: String): Boolean
 }
 
 class WorkspacesService(
@@ -29,10 +31,10 @@ class WorkspacesService(
     private val settings: WorkspaceSettingsRepositoryPort = WorkspaceSettingsRepository(),
     private val records: WorkspaceRecordsRepositoryPort = WorkspaceRecordsRepository()
 ) : WorkspacesServicePort {
-    override fun listWorkspaces(user: UserContext): WorkspacesListResponse {
+    override fun listWorkspaces(user: UserContext, includeDeleted: Boolean): WorkspacesListResponse {
         val memberItems = listActiveMemberships(user)
         val workspaceIds = memberItems.map { it.workspaceId }.distinct()
-        val items = workspaces.batchGet(workspaceIds)
+        val items = workspaces.batchGet(workspaceIds).filter { includeDeleted || it.deletedAt == null }
         val memberByWorkspace = memberItems.associateBy { it.workspaceId }
 
         val sharedByWorkspaceForOwners = memberItems
@@ -55,7 +57,10 @@ class WorkspacesService(
                     status = membership?.status,
                     accessMode = accessMode,
                     sharedByMe = sharedByMe,
-                    sharedWithMe = sharedWithMe
+                    sharedWithMe = sharedWithMe,
+                    deletedAt = ws.deletedAt,
+                    deletedBy = ws.deletedBy,
+                    ttlEpoch = ws.ttlEpoch
                 )
             }
             .sortedBy { it.name.lowercase() }
@@ -104,10 +109,26 @@ class WorkspacesService(
             throw ForbiddenWorkspaceDeleteException("Only workspace owners can delete workspaces")
         }
 
-        records.deleteByWorkspaceId(workspaceId)
-        memberships.deleteByWorkspaceId(workspaceId)
-        settings.deleteSettings(workspaceId)
-        workspaces.delete(workspaceId)
+        val deletedAt = Instant.now().toString()
+        val ttlEpoch = Instant.now().epochSecond + TTL_SECONDS
+        workspaces.markDeleted(workspaceId, deletedAt = deletedAt, deletedBy = user.userId, ttlEpoch = ttlEpoch)
+        settings.setTtl(workspaceId, ttlEpoch)
+        memberships.setTtlByWorkspaceId(workspaceId, ttlEpoch)
+        records.setTtlByWorkspaceId(workspaceId, ttlEpoch)
+        return true
+    }
+
+    override fun restoreWorkspace(user: UserContext, workspaceId: String): Boolean {
+        val ws = workspaces.get(workspaceId) ?: return false
+        if (ws.ownerUserId != user.userId) {
+            throw ForbiddenWorkspaceRestoreException("Only workspace owners can restore workspaces")
+        }
+        if (ws.deletedAt == null) return true
+
+        workspaces.restore(workspaceId)
+        settings.clearTtl(workspaceId)
+        memberships.clearTtlByWorkspaceId(workspaceId)
+        records.clearTtlByWorkspaceId(workspaceId)
         return true
     }
 
@@ -148,7 +169,9 @@ class WorkspacesService(
 
     private companion object {
         val ACTIVE_STATUSES = setOf("ACTIVE", "ACCEPTED", "OWNER")
+        const val TTL_SECONDS: Long = 30L * 24L * 60L * 60L
     }
 }
 
 class ForbiddenWorkspaceDeleteException(message: String) : RuntimeException(message)
+class ForbiddenWorkspaceRestoreException(message: String) : RuntimeException(message)

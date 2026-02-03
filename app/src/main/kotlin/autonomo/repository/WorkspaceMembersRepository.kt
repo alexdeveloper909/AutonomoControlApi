@@ -8,6 +8,7 @@ import software.amazon.awssdk.services.dynamodb.model.AttributeValue
 import software.amazon.awssdk.services.dynamodb.model.GetItemRequest
 import software.amazon.awssdk.services.dynamodb.model.PutItemRequest
 import software.amazon.awssdk.services.dynamodb.model.QueryRequest
+import software.amazon.awssdk.services.dynamodb.model.UpdateItemRequest
 
 interface WorkspaceMembersRepositoryPort {
     fun getByUserId(workspaceId: String, userId: String): WorkspaceMember?
@@ -21,6 +22,8 @@ interface WorkspaceMembershipsRepositoryPort {
     fun putMember(workspaceId: String, memberKey: String, userId: String?, emailLower: String?, role: String?, status: String?)
     fun deleteMember(workspaceId: String, memberKey: String)
     fun deleteByWorkspaceId(workspaceId: String)
+    fun setTtlByWorkspaceId(workspaceId: String, ttlEpoch: Long)
+    fun clearTtlByWorkspaceId(workspaceId: String)
 }
 
 class WorkspaceMembersRepository(
@@ -135,6 +138,47 @@ class WorkspaceMembersRepository(
     override fun deleteByWorkspaceId(workspaceId: String) {
         val members = listByWorkspaceId(workspaceId)
         members.forEach { m -> deleteMember(workspaceId, m.memberKey) }
+    }
+
+    override fun setTtlByWorkspaceId(workspaceId: String, ttlEpoch: Long) {
+        val members = listByWorkspaceId(workspaceId)
+        members.forEach { m ->
+            client.updateItem(
+                UpdateItemRequest.builder()
+                    .tableName(tableName)
+                    .key(
+                        mapOf(
+                            "workspace_id" to AttributeValue.builder().s(workspaceId).build(),
+                            "member_key" to AttributeValue.builder().s(m.memberKey).build()
+                        )
+                    )
+                    .updateExpression("SET ttl_epoch = :ttl")
+                    .expressionAttributeValues(
+                        mapOf(
+                            ":ttl" to AttributeValue.builder().n(ttlEpoch.toString()).build()
+                        )
+                    )
+                    .build()
+            )
+        }
+    }
+
+    override fun clearTtlByWorkspaceId(workspaceId: String) {
+        val members = listByWorkspaceId(workspaceId)
+        members.forEach { m ->
+            client.updateItem(
+                UpdateItemRequest.builder()
+                    .tableName(tableName)
+                    .key(
+                        mapOf(
+                            "workspace_id" to AttributeValue.builder().s(workspaceId).build(),
+                            "member_key" to AttributeValue.builder().s(m.memberKey).build()
+                        )
+                    )
+                    .updateExpression("REMOVE ttl_epoch")
+                    .build()
+            )
+        }
     }
 
     private fun fromItem(item: Map<String, AttributeValue>): WorkspaceMember {

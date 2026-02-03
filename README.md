@@ -46,6 +46,7 @@ in the Lambda handler/controller, also add the corresponding route in the CDK st
 - `GET /workspaces`
 - `POST /workspaces`
 - `DELETE /workspaces/{workspaceId}`
+- `POST /workspaces/{workspaceId}/restore`
 - `POST /workspaces/{workspaceId}/share` (share workspace read-only by email)
 - `GET /workspaces/{workspaceId}/settings`
 - `PUT /workspaces/{workspaceId}/settings`

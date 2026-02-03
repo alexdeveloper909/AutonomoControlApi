@@ -9,6 +9,8 @@ interface WorkspaceRecordsRepositoryPort {
     fun get(workspaceId: String, recordKey: String): RecordItem?
     fun delete(workspaceId: String, recordKey: String)
     fun deleteByWorkspaceId(workspaceId: String)
+    fun setTtlByWorkspaceId(workspaceId: String, ttlEpoch: Long)
+    fun clearTtlByWorkspaceId(workspaceId: String)
     fun queryByWorkspaceRecordKeyPrefix(workspaceId: String, recordKeyPrefix: String): List<RecordItem>
     fun queryByMonth(workspaceMonth: String, recordType: RecordType?): List<RecordItem>
     fun queryByQuarter(workspaceQuarter: String, recordType: RecordType?): List<RecordItem>

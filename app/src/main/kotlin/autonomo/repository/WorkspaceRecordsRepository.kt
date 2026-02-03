@@ -17,6 +17,7 @@ import software.amazon.awssdk.services.dynamodb.model.DeleteItemRequest
 import software.amazon.awssdk.services.dynamodb.model.GetItemRequest
 import software.amazon.awssdk.services.dynamodb.model.PutItemRequest
 import software.amazon.awssdk.services.dynamodb.model.QueryRequest
+import software.amazon.awssdk.services.dynamodb.model.UpdateItemRequest
 import software.amazon.awssdk.services.dynamodb.model.WriteRequest
 
 class WorkspaceRecordsRepository(
@@ -99,6 +100,14 @@ class WorkspaceRecordsRepository(
 
             startKey = response.lastEvaluatedKey()
         } while (!startKey.isNullOrEmpty())
+    }
+
+    override fun setTtlByWorkspaceId(workspaceId: String, ttlEpoch: Long) {
+        updateTtlByWorkspaceId(workspaceId, ttlEpoch)
+    }
+
+    override fun clearTtlByWorkspaceId(workspaceId: String) {
+        updateTtlByWorkspaceId(workspaceId, null)
     }
 
     override fun queryByWorkspaceRecordKeyPrefix(
@@ -251,5 +260,52 @@ class WorkspaceRecordsRepository(
 
             throw IllegalStateException("Failed to delete all workspace records (DynamoDB batch write left unprocessed items)")
         }
+    }
+
+    private fun updateTtlByWorkspaceId(workspaceId: String, ttlEpoch: Long?) {
+        var startKey: Map<String, AttributeValue>? = null
+        do {
+            val response = client.query(
+                QueryRequest.builder()
+                    .tableName(tableName)
+                    .keyConditionExpression("workspace_id = :pk")
+                    .expressionAttributeValues(
+                        mapOf(
+                            ":pk" to AttributeValue.builder().s(workspaceId).build()
+                        )
+                    )
+                    .projectionExpression("workspace_id, record_key")
+                    .exclusiveStartKey(startKey)
+                    .build()
+            )
+
+            response.items().forEach { item ->
+                val pk = item["workspace_id"] ?: return@forEach
+                val sk = item["record_key"] ?: return@forEach
+                val key = mapOf("workspace_id" to pk, "record_key" to sk)
+
+                val request = if (ttlEpoch == null) {
+                    UpdateItemRequest.builder()
+                        .tableName(tableName)
+                        .key(key)
+                        .updateExpression("REMOVE ttl_epoch")
+                        .build()
+                } else {
+                    UpdateItemRequest.builder()
+                        .tableName(tableName)
+                        .key(key)
+                        .updateExpression("SET ttl_epoch = :ttl")
+                        .expressionAttributeValues(
+                            mapOf(
+                                ":ttl" to AttributeValue.builder().n(ttlEpoch.toString()).build()
+                            )
+                        )
+                        .build()
+                }
+                client.updateItem(request)
+            }
+
+            startKey = response.lastEvaluatedKey()
+        } while (!startKey.isNullOrEmpty())
     }
 }

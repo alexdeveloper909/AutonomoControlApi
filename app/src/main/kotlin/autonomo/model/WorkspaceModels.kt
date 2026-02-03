@@ -9,7 +9,10 @@ data class WorkspaceSummary(
     val status: String?,
     val accessMode: String,
     val sharedByMe: Boolean = false,
-    val sharedWithMe: Boolean = false
+    val sharedWithMe: Boolean = false,
+    val deletedAt: String? = null,
+    val deletedBy: String? = null,
+    val ttlEpoch: Long? = null
 )
 
 data class WorkspacesListResponse(

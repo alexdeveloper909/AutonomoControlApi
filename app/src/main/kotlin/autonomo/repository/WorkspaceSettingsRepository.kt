@@ -16,6 +16,8 @@ interface WorkspaceSettingsRepositoryPort {
     fun getSettings(workspaceId: String): Settings?
     fun putSettings(workspaceId: String, settings: Settings, updatedBy: String)
     fun deleteSettings(workspaceId: String)
+    fun setTtl(workspaceId: String, ttlEpoch: Long)
+    fun clearTtl(workspaceId: String)
 }
 
 class WorkspaceSettingsRepository(
@@ -78,6 +80,35 @@ class WorkspaceSettingsRepository(
                     "workspace_id" to AttributeValue.builder().s(workspaceId).build()
                 )
             )
+        }
+    }
+
+    override fun setTtl(workspaceId: String, ttlEpoch: Long) {
+        client.updateItem { b ->
+            b.tableName(tableName)
+            b.key(
+                mapOf(
+                    "workspace_id" to AttributeValue.builder().s(workspaceId).build()
+                )
+            )
+            b.updateExpression("SET ttl_epoch = :ttl")
+            b.expressionAttributeValues(
+                mapOf(
+                    ":ttl" to AttributeValue.builder().n(ttlEpoch.toString()).build()
+                )
+            )
+        }
+    }
+
+    override fun clearTtl(workspaceId: String) {
+        client.updateItem { b ->
+            b.tableName(tableName)
+            b.key(
+                mapOf(
+                    "workspace_id" to AttributeValue.builder().s(workspaceId).build()
+                )
+            )
+            b.updateExpression("REMOVE ttl_epoch")
         }
     }
 }

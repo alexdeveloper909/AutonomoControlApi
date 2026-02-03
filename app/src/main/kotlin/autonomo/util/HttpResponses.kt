@@ -21,6 +21,7 @@ object HttpResponses {
     fun forbidden(message: String = "Forbidden"): HttpResponse = error(403, message)
     fun notFound(message: String = "Not found"): HttpResponse = error(404, message)
     fun conflict(message: String): HttpResponse = error(409, message)
+    fun gone(message: String = "Gone"): HttpResponse = error(410, message)
     fun serverError(message: String): HttpResponse = error(500, message)
 
     private fun json(status: Int, body: Any): HttpResponse {

@@ -15,13 +15,18 @@ data class WorkspaceItem(
     val name: String,
     val ownerUserId: String,
     val createdAt: String?,
-    val updatedAt: String?
+    val updatedAt: String?,
+    val deletedAt: String?,
+    val deletedBy: String?,
+    val ttlEpoch: Long?
 )
 
 interface WorkspacesRepositoryPort {
     fun put(workspaceId: String, name: String, ownerUserId: String)
     fun get(workspaceId: String): WorkspaceItem?
     fun delete(workspaceId: String)
+    fun markDeleted(workspaceId: String, deletedAt: String, deletedBy: String, ttlEpoch: Long)
+    fun restore(workspaceId: String)
     fun batchGet(workspaceIds: List<String>): List<WorkspaceItem>
     fun listByOwnerUserId(ownerUserId: String): List<WorkspaceItem>
 }
@@ -72,6 +77,45 @@ class WorkspacesRepository(
         }
     }
 
+    override fun markDeleted(workspaceId: String, deletedAt: String, deletedBy: String, ttlEpoch: Long) {
+        val now = Instant.now().toString()
+        client.updateItem { b ->
+            b.tableName(tableName)
+            b.key(
+                mapOf(
+                    "workspace_id" to AttributeValue.builder().s(workspaceId).build()
+                )
+            )
+            b.updateExpression("SET deleted_at = :d, deleted_by = :db, ttl_epoch = :ttl, updated_at = :u")
+            b.expressionAttributeValues(
+                mapOf(
+                    ":d" to AttributeValue.builder().s(deletedAt).build(),
+                    ":db" to AttributeValue.builder().s(deletedBy).build(),
+                    ":ttl" to AttributeValue.builder().n(ttlEpoch.toString()).build(),
+                    ":u" to AttributeValue.builder().s(now).build()
+                )
+            )
+        }
+    }
+
+    override fun restore(workspaceId: String) {
+        val now = Instant.now().toString()
+        client.updateItem { b ->
+            b.tableName(tableName)
+            b.key(
+                mapOf(
+                    "workspace_id" to AttributeValue.builder().s(workspaceId).build()
+                )
+            )
+            b.updateExpression("REMOVE deleted_at, deleted_by, ttl_epoch SET updated_at = :u")
+            b.expressionAttributeValues(
+                mapOf(
+                    ":u" to AttributeValue.builder().s(now).build()
+                )
+            )
+        }
+    }
+
     override fun batchGet(workspaceIds: List<String>): List<WorkspaceItem> {
         if (workspaceIds.isEmpty()) return emptyList()
 
@@ -114,7 +158,10 @@ class WorkspacesRepository(
             name = item.getValue("name").s(),
             ownerUserId = item.getValue("owner_user_id").s(),
             createdAt = item["created_at"]?.s(),
-            updatedAt = item["updated_at"]?.s()
+            updatedAt = item["updated_at"]?.s(),
+            deletedAt = item["deleted_at"]?.s(),
+            deletedBy = item["deleted_by"]?.s(),
+            ttlEpoch = item["ttl_epoch"]?.n()?.toLongOrNull()
         )
     }
 

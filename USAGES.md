@@ -24,6 +24,7 @@ Response:
 ### List workspaces
 
 - `GET /workspaces`
+- Optional query: `includeDeleted=true` (includes workspaces in Trash)
 
 Success response (200):
 ```json
@@ -61,7 +62,19 @@ Success response (201):
 Notes:
 
 - Requires workspace owner access.
-- Deletes the workspace, its settings, memberships, and all records.
+- Moves the workspace to Trash for 30 days, after which it will be permanently deleted (DynamoDB TTL).
+- While in Trash, the workspace cannot be accessed via `/workspaces/{workspaceId}/...` routes.
+
+Success response (204): empty body.
+
+### Restore workspace
+
+- `POST /workspaces/{workspaceId}/restore`
+
+Notes:
+
+- Requires workspace owner access.
+- Restores a workspace from Trash (if it hasn't been permanently deleted yet).
 
 Success response (204): empty body.
 

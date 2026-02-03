@@ -116,6 +116,8 @@ class SummariesServiceTest {
         override fun get(workspaceId: String, recordKey: String): RecordItem? = throw UnsupportedOperationException()
         override fun delete(workspaceId: String, recordKey: String) = throw UnsupportedOperationException()
         override fun deleteByWorkspaceId(workspaceId: String) = throw UnsupportedOperationException()
+        override fun setTtlByWorkspaceId(workspaceId: String, ttlEpoch: Long) = throw UnsupportedOperationException()
+        override fun clearTtlByWorkspaceId(workspaceId: String) = throw UnsupportedOperationException()
 
         override fun queryByWorkspaceRecordKeyPrefix(workspaceId: String, recordKeyPrefix: String): List<RecordItem> =
             emptyList()

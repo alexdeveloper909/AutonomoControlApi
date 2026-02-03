@@ -15,7 +15,16 @@ class WorkspacesServiceSharingFlagsTest {
     fun ownerWorkspaceIsMarkedSharedWhenHasReaders() {
         val wsRepo = FakeWorkspacesRepo(
             mapOf(
-                "ws-1" to WorkspaceItem("ws-1", "Alpha", ownerUserId = "owner-1", createdAt = null, updatedAt = null)
+                "ws-1" to WorkspaceItem(
+                    "ws-1",
+                    "Alpha",
+                    ownerUserId = "owner-1",
+                    createdAt = null,
+                    updatedAt = null,
+                    deletedAt = null,
+                    deletedBy = null,
+                    ttlEpoch = null
+                )
             )
         )
         val memberships = FakeMembershipsRepo(
@@ -61,7 +70,16 @@ class WorkspacesServiceSharingFlagsTest {
     fun readerWorkspaceIsReadOnlyAndMarkedSharedWithMe() {
         val wsRepo = FakeWorkspacesRepo(
             mapOf(
-                "ws-1" to WorkspaceItem("ws-1", "Alpha", ownerUserId = "owner-1", createdAt = null, updatedAt = null)
+                "ws-1" to WorkspaceItem(
+                    "ws-1",
+                    "Alpha",
+                    ownerUserId = "owner-1",
+                    createdAt = null,
+                    updatedAt = null,
+                    deletedAt = null,
+                    deletedBy = null,
+                    ttlEpoch = null
+                )
             )
         )
         val memberships = FakeMembershipsRepo(
@@ -98,6 +116,10 @@ class WorkspacesServiceSharingFlagsTest {
 
         override fun delete(workspaceId: String) = Unit
 
+        override fun markDeleted(workspaceId: String, deletedAt: String, deletedBy: String, ttlEpoch: Long) = Unit
+
+        override fun restore(workspaceId: String) = Unit
+
         override fun batchGet(workspaceIds: List<String>): List<WorkspaceItem> =
             workspaceIds.mapNotNull { byId[it] }
 
@@ -127,6 +149,10 @@ class WorkspacesServiceSharingFlagsTest {
         override fun deleteMember(workspaceId: String, memberKey: String) = Unit
 
         override fun deleteByWorkspaceId(workspaceId: String) = Unit
+
+        override fun setTtlByWorkspaceId(workspaceId: String, ttlEpoch: Long) = Unit
+
+        override fun clearTtlByWorkspaceId(workspaceId: String) = Unit
     }
 
     private class FakeSettingsRepo : WorkspaceSettingsRepositoryPort {
@@ -135,5 +161,9 @@ class WorkspacesServiceSharingFlagsTest {
         override fun putSettings(workspaceId: String, settings: autonomo.domain.Settings, updatedBy: String) = Unit
 
         override fun deleteSettings(workspaceId: String) = Unit
+
+        override fun setTtl(workspaceId: String, ttlEpoch: Long) = Unit
+
+        override fun clearTtl(workspaceId: String) = Unit
     }
 }

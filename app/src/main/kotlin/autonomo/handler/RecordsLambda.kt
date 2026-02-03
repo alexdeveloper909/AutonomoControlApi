@@ -7,6 +7,7 @@ import autonomo.controller.WorkspaceSharingController
 import autonomo.controller.WorkspaceSettingsController
 import autonomo.controller.WorkspacesController
 import autonomo.model.UserContext
+import autonomo.repository.WorkspacesRepository
 import autonomo.util.HttpResponse
 import autonomo.util.HttpResponses
 import com.amazonaws.services.lambda.runtime.Context
@@ -21,6 +22,7 @@ class RecordsLambda : RequestHandler<APIGatewayV2HTTPEvent, APIGatewayV2HTTPResp
     private val workspaceSettingsController = WorkspaceSettingsController()
     private val workspaceSharingController = WorkspaceSharingController()
     private val usersController = UsersController()
+    private val workspaces = WorkspacesRepository()
 
     override fun handleRequest(
         event: APIGatewayV2HTTPEvent,
@@ -58,7 +60,7 @@ class RecordsLambda : RequestHandler<APIGatewayV2HTTPEvent, APIGatewayV2HTTPResp
 
         if (segments.size == 1 && segments[0] == "workspaces") {
             return when (method) {
-                "GET" -> workspacesController.listWorkspaces(user)
+                "GET" -> workspacesController.listWorkspaces(user, event.queryStringParameters ?: emptyMap())
                 "POST" -> workspacesController.createWorkspace(event.body, user)
                 else -> HttpResponses.notFound("Route not found")
             }
@@ -69,6 +71,24 @@ class RecordsLambda : RequestHandler<APIGatewayV2HTTPEvent, APIGatewayV2HTTPResp
             return when (method) {
                 "DELETE" -> workspacesController.deleteWorkspace(workspaceId, user)
                 else -> HttpResponses.notFound("Route not found")
+            }
+        }
+
+        if (segments.size == 3 && segments[0] == "workspaces" && segments[2] == "restore") {
+            val workspaceId = segments.getOrNull(1)
+            return when (method) {
+                "POST" -> workspacesController.restoreWorkspace(workspaceId, user)
+                else -> HttpResponses.notFound("Route not found")
+            }
+        }
+
+        if (segments.size >= 3 && segments[0] == "workspaces") {
+            val workspaceId = segments.getOrNull(1)
+            if (!workspaceId.isNullOrBlank()) {
+                val ws = workspaces.get(workspaceId)
+                if (ws?.deletedAt != null) {
+                    return HttpResponses.gone("Workspace is in Trash")
+                }
             }
         }
 
