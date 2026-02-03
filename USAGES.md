@@ -54,6 +54,17 @@ Success response (201):
 }
 ```
 
+### Delete workspace
+
+- `DELETE /workspaces/{workspaceId}`
+
+Notes:
+
+- Requires workspace owner access.
+- Deletes the workspace, its settings, memberships, and all records.
+
+Success response (204): empty body.
+
 ### Workspace settings
 
 - `GET /workspaces/{workspaceId}/settings`

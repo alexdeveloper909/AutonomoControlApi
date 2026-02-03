@@ -67,6 +67,10 @@ class WorkspaceSharingServiceTest {
             lastRole = role
             lastStatus = status
         }
+
+        override fun deleteMember(workspaceId: String, memberKey: String) = Unit
+
+        override fun deleteByWorkspaceId(workspaceId: String) = Unit
     }
 
     private class FakeAccess(private val canAdmin: Boolean) : WorkspaceAccessPort {
@@ -79,4 +83,3 @@ class WorkspaceSharingServiceTest {
         override fun getActiveMember(workspaceId: String, user: UserContext) = null
     }
 }
-

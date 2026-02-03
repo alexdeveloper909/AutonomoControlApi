@@ -19,6 +19,8 @@ interface WorkspaceMembershipsRepositoryPort {
     fun listByEmail(emailLower: String): List<WorkspaceMember>
     fun listByWorkspaceId(workspaceId: String): List<WorkspaceMember>
     fun putMember(workspaceId: String, memberKey: String, userId: String?, emailLower: String?, role: String?, status: String?)
+    fun deleteMember(workspaceId: String, memberKey: String)
+    fun deleteByWorkspaceId(workspaceId: String)
 }
 
 class WorkspaceMembersRepository(
@@ -116,6 +118,23 @@ class WorkspaceMembersRepository(
                 .item(item)
                 .build()
         )
+    }
+
+    override fun deleteMember(workspaceId: String, memberKey: String) {
+        client.deleteItem { b ->
+            b.tableName(tableName)
+            b.key(
+                mapOf(
+                    "workspace_id" to AttributeValue.builder().s(workspaceId).build(),
+                    "member_key" to AttributeValue.builder().s(memberKey).build()
+                )
+            )
+        }
+    }
+
+    override fun deleteByWorkspaceId(workspaceId: String) {
+        val members = listByWorkspaceId(workspaceId)
+        members.forEach { m -> deleteMember(workspaceId, m.memberKey) }
     }
 
     private fun fromItem(item: Map<String, AttributeValue>): WorkspaceMember {

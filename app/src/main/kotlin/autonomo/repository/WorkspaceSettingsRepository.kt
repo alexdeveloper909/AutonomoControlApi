@@ -15,6 +15,7 @@ import java.time.Instant
 interface WorkspaceSettingsRepositoryPort {
     fun getSettings(workspaceId: String): Settings?
     fun putSettings(workspaceId: String, settings: Settings, updatedBy: String)
+    fun deleteSettings(workspaceId: String)
 }
 
 class WorkspaceSettingsRepository(
@@ -67,5 +68,16 @@ class WorkspaceSettingsRepository(
                 .item(item)
                 .build()
         )
+    }
+
+    override fun deleteSettings(workspaceId: String) {
+        client.deleteItem { b ->
+            b.tableName(tableName)
+            b.key(
+                mapOf(
+                    "workspace_id" to AttributeValue.builder().s(workspaceId).build()
+                )
+            )
+        }
     }
 }

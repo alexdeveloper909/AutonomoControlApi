@@ -8,6 +8,8 @@ import autonomo.model.WorkspacesListResponse
 import autonomo.model.WorkspaceMember
 import autonomo.repository.WorkspaceMembersRepository
 import autonomo.repository.WorkspaceMembershipsRepositoryPort
+import autonomo.repository.WorkspaceRecordsRepository
+import autonomo.repository.WorkspaceRecordsRepositoryPort
 import autonomo.repository.WorkspacesRepository
 import autonomo.repository.WorkspacesRepositoryPort
 import autonomo.repository.WorkspaceSettingsRepository
@@ -18,12 +20,14 @@ import java.util.UUID
 interface WorkspacesServicePort {
     fun listWorkspaces(user: UserContext): WorkspacesListResponse
     fun createWorkspace(user: UserContext, request: WorkspaceCreateRequest): WorkspaceCreateResponse
+    fun deleteWorkspace(user: UserContext, workspaceId: String): Boolean
 }
 
 class WorkspacesService(
     private val workspaces: WorkspacesRepositoryPort = WorkspacesRepository(),
     private val memberships: WorkspaceMembershipsRepositoryPort = WorkspaceMembersRepository(),
-    private val settings: WorkspaceSettingsRepositoryPort = WorkspaceSettingsRepository()
+    private val settings: WorkspaceSettingsRepositoryPort = WorkspaceSettingsRepository(),
+    private val records: WorkspaceRecordsRepositoryPort = WorkspaceRecordsRepository()
 ) : WorkspacesServicePort {
     override fun listWorkspaces(user: UserContext): WorkspacesListResponse {
         val memberItems = listActiveMemberships(user)
@@ -94,6 +98,19 @@ class WorkspacesService(
         )
     }
 
+    override fun deleteWorkspace(user: UserContext, workspaceId: String): Boolean {
+        val ws = workspaces.get(workspaceId) ?: return false
+        if (ws.ownerUserId != user.userId) {
+            throw ForbiddenWorkspaceDeleteException("Only workspace owners can delete workspaces")
+        }
+
+        records.deleteByWorkspaceId(workspaceId)
+        memberships.deleteByWorkspaceId(workspaceId)
+        settings.deleteSettings(workspaceId)
+        workspaces.delete(workspaceId)
+        return true
+    }
+
     private fun listActiveMemberships(user: UserContext): List<WorkspaceMember> {
         val byUserId = memberships.listByUserId(user.userId).filter { isActive(it) }
         val byEmail = user.email?.lowercase()?.let { memberships.listByEmail(it).filter { m -> isActive(m) } }.orEmpty()
@@ -133,3 +150,5 @@ class WorkspacesService(
         val ACTIVE_STATUSES = setOf("ACTIVE", "ACCEPTED", "OWNER")
     }
 }
+
+class ForbiddenWorkspaceDeleteException(message: String) : RuntimeException(message)

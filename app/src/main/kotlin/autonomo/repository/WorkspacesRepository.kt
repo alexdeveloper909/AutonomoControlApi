@@ -21,6 +21,7 @@ data class WorkspaceItem(
 interface WorkspacesRepositoryPort {
     fun put(workspaceId: String, name: String, ownerUserId: String)
     fun get(workspaceId: String): WorkspaceItem?
+    fun delete(workspaceId: String)
     fun batchGet(workspaceIds: List<String>): List<WorkspaceItem>
     fun listByOwnerUserId(ownerUserId: String): List<WorkspaceItem>
 }
@@ -58,6 +59,17 @@ class WorkspacesRepository(
         }
         if (!response.hasItem()) return null
         return fromItem(response.item())
+    }
+
+    override fun delete(workspaceId: String) {
+        client.deleteItem { b ->
+            b.tableName(tableName)
+            b.key(
+                mapOf(
+                    "workspace_id" to AttributeValue.builder().s(workspaceId).build()
+                )
+            )
+        }
     }
 
     override fun batchGet(workspaceIds: List<String>): List<WorkspaceItem> {
@@ -110,4 +122,3 @@ class WorkspacesRepository(
         const val GSI_BY_OWNER_USER_ID = "by_owner_user_id"
     }
 }
-

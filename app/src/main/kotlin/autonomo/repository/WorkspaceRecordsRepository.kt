@@ -10,11 +10,14 @@ import java.time.Instant
 import java.time.LocalDate
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue
+import software.amazon.awssdk.services.dynamodb.model.BatchWriteItemRequest
 import software.amazon.awssdk.services.dynamodb.model.ConditionalCheckFailedException
+import software.amazon.awssdk.services.dynamodb.model.DeleteRequest
 import software.amazon.awssdk.services.dynamodb.model.DeleteItemRequest
 import software.amazon.awssdk.services.dynamodb.model.GetItemRequest
 import software.amazon.awssdk.services.dynamodb.model.PutItemRequest
 import software.amazon.awssdk.services.dynamodb.model.QueryRequest
+import software.amazon.awssdk.services.dynamodb.model.WriteRequest
 
 class WorkspaceRecordsRepository(
     private val client: DynamoDbClient = DynamoConfig.client(),
@@ -65,6 +68,37 @@ class WorkspaceRecordsRepository(
             )
             .build()
         client.deleteItem(request)
+    }
+
+    override fun deleteByWorkspaceId(workspaceId: String) {
+        var startKey: Map<String, AttributeValue>? = null
+        do {
+            val response = client.query(
+                QueryRequest.builder()
+                    .tableName(tableName)
+                    .keyConditionExpression("workspace_id = :pk")
+                    .expressionAttributeValues(
+                        mapOf(
+                            ":pk" to AttributeValue.builder().s(workspaceId).build()
+                        )
+                    )
+                    .projectionExpression("workspace_id, record_key")
+                    .exclusiveStartKey(startKey)
+                    .build()
+            )
+
+            val keys = response.items().mapNotNull { item ->
+                val pk = item["workspace_id"] ?: return@mapNotNull null
+                val sk = item["record_key"] ?: return@mapNotNull null
+                mapOf(
+                    "workspace_id" to pk,
+                    "record_key" to sk
+                )
+            }
+            batchDelete(keys)
+
+            startKey = response.lastEvaluatedKey()
+        } while (!startKey.isNullOrEmpty())
     }
 
     override fun queryByWorkspaceRecordKeyPrefix(
@@ -187,5 +221,35 @@ class WorkspaceRecordsRepository(
 
     override fun isConditionalFailure(ex: Exception): Boolean {
         return ex is ConditionalCheckFailedException
+    }
+
+    private fun batchDelete(keys: List<Map<String, AttributeValue>>) {
+        if (keys.isEmpty()) return
+
+        val chunks = keys.chunked(25)
+        chunks.forEach { chunk ->
+            var requestItems = mapOf(
+                tableName to chunk.map { key ->
+                    WriteRequest.builder()
+                        .deleteRequest(DeleteRequest.builder().key(key).build())
+                        .build()
+                }
+            )
+
+            repeat(5) { attempt ->
+                val res = client.batchWriteItem(
+                    BatchWriteItemRequest.builder()
+                        .requestItems(requestItems)
+                        .build()
+                )
+                val unprocessed = res.unprocessedItems()
+                val next = unprocessed[tableName].orEmpty()
+                if (next.isEmpty()) return
+                requestItems = mapOf(tableName to next)
+                Thread.sleep(50L * (attempt + 1))
+            }
+
+            throw IllegalStateException("Failed to delete all workspace records (DynamoDB batch write left unprocessed items)")
+        }
     }
 }

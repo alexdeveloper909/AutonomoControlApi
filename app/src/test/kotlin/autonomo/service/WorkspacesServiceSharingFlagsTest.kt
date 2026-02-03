@@ -96,6 +96,8 @@ class WorkspacesServiceSharingFlagsTest {
 
         override fun get(workspaceId: String): WorkspaceItem? = byId[workspaceId]
 
+        override fun delete(workspaceId: String) = Unit
+
         override fun batchGet(workspaceIds: List<String>): List<WorkspaceItem> =
             workspaceIds.mapNotNull { byId[it] }
 
@@ -121,12 +123,17 @@ class WorkspacesServiceSharingFlagsTest {
             role: String?,
             status: String?
         ) = Unit
+
+        override fun deleteMember(workspaceId: String, memberKey: String) = Unit
+
+        override fun deleteByWorkspaceId(workspaceId: String) = Unit
     }
 
     private class FakeSettingsRepo : WorkspaceSettingsRepositoryPort {
         override fun getSettings(workspaceId: String) = null
 
         override fun putSettings(workspaceId: String, settings: autonomo.domain.Settings, updatedBy: String) = Unit
+
+        override fun deleteSettings(workspaceId: String) = Unit
     }
 }
-

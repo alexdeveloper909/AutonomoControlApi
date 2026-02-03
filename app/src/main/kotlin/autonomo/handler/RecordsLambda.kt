@@ -64,6 +64,14 @@ class RecordsLambda : RequestHandler<APIGatewayV2HTTPEvent, APIGatewayV2HTTPResp
             }
         }
 
+        if (segments.size == 2 && segments[0] == "workspaces") {
+            val workspaceId = segments.getOrNull(1)
+            return when (method) {
+                "DELETE" -> workspacesController.deleteWorkspace(workspaceId, user)
+                else -> HttpResponses.notFound("Route not found")
+            }
+        }
+
         if (segments.size == 3 && segments[0] == "workspaces" && segments[2] == "settings") {
             val workspaceId = segments.getOrNull(1)
             return when (method) {
