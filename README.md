@@ -52,6 +52,7 @@ in the Lambda handler/controller, also add the corresponding route in the CDK st
 - `PUT /workspaces/{workspaceId}/settings`
 - `POST /workspaces/{workspaceId}/summaries/months`
 - `POST /workspaces/{workspaceId}/summaries/quarters`
+- `POST /workspaces/{workspaceId}/summaries/renta`
 - `POST /workspaces/{workspaceId}/records`
   - body:
     ```json
@@ -138,11 +139,16 @@ Summaries endpoints accept `autonomo.domain.Settings` (from `autonomo-control-co
   "irpfRate": 0.20,
   "obligacion130": true,
   "openingBalance": 200.00,
-  "expenseCategories": ["Software/SaaS", "Equipment", "Other"]
+  "expenseCategories": ["Software/SaaS", "Equipment", "Other"],
+  "rentaPlanning": {
+    "enabled": false
+  }
 }
 ```
 
 Responses include `items` with `monthKey` (`YYYY-MM`) or `quarterKey` (`{ "year": 2025, "quarter": 3 }`) plus calculated totals (cash flow, VAT/IRPF estimates, reserves).
+
+`POST /workspaces/{workspaceId}/summaries/renta` returns an annual IRPF estimate for planning when `settings.rentaPlanning.enabled=true` (otherwise `renta` is `null`).
 
 `eventDate` is derived by type:
 - Invoice: `paymentDate ?: invoiceDate`

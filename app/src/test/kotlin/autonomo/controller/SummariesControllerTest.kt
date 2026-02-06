@@ -53,6 +53,17 @@ class SummariesControllerTest {
         assertEquals("Invalid settings", error.message)
     }
 
+    @Test
+    fun rentaSummaryReturns200() {
+        val controller = SummariesController(FakeSummariesService(), FakeAccessService(true))
+        val body = settingsJson(year = 2024)
+
+        val response = controller.rentaSummary("ws-1", body, UserContext("user-1", "user@example.com"))
+
+        assertEquals(200, response.statusCode)
+        assertTrue(response.body?.contains("\"renta\"") == true)
+    }
+
     private class FakeSummariesService : SummariesServicePort {
         override fun monthSummaries(workspaceId: String, settings: Settings) =
             autonomo.model.MonthSummariesResponse(
@@ -64,6 +75,12 @@ class SummariesControllerTest {
             autonomo.model.QuarterSummariesResponse(
                 settings = settings,
                 items = emptyList()
+            )
+
+        override fun rentaSummary(workspaceId: String, settings: Settings) =
+            autonomo.model.RentaSummaryResponse(
+                settings = settings,
+                renta = null
             )
     }
 
@@ -85,7 +102,8 @@ class SummariesControllerTest {
             irpfRate = Rate.fromDecimal("0.20"),
             obligacion130 = true,
             openingBalance = Money.ZERO,
-            expenseCategories = emptySet()
+            expenseCategories = emptySet(),
+            rentaPlanning = null
         )
         return autonomo.config.JsonSupport.mapper.writeValueAsString(settings)
     }

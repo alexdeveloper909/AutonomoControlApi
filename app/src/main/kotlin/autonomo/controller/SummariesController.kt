@@ -33,6 +33,16 @@ class SummariesController(
         }.getOrElse { HttpResponses.badRequest(it.message ?: "Invalid request") }
     }
 
+    fun rentaSummary(workspaceId: String?, body: String?, user: UserContext?): HttpResponse {
+        if (workspaceId.isNullOrBlank()) return HttpResponses.badRequest("workspaceId is required")
+        val caller = user ?: return HttpResponses.unauthorized()
+        ensureAccess(workspaceId, caller)?.let { return it }
+        val settings = parseSettings(body) ?: return HttpResponses.badRequest("Invalid settings")
+        return runCatching {
+            HttpResponses.ok(service.rentaSummary(workspaceId, settings))
+        }.getOrElse { HttpResponses.badRequest(it.message ?: "Invalid request") }
+    }
+
     private fun parseSettings(body: String?): Settings? {
         if (body.isNullOrBlank()) return null
         return runCatching { autonomo.config.JsonSupport.mapper.readValue(body, Settings::class.java) }.getOrNull()

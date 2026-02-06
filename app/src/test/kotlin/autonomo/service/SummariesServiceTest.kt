@@ -6,12 +6,15 @@ import autonomo.domain.MonthKey
 import autonomo.domain.Money
 import autonomo.domain.Rate
 import autonomo.domain.RetencionRate
+import autonomo.domain.RentaPlanningSettings
+import autonomo.domain.IrpfTerritory
 import autonomo.domain.Settings
 import autonomo.model.RecordItem
 import autonomo.model.RecordType
 import autonomo.repository.WorkspaceRecordsRepositoryPort
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
 import java.math.BigDecimal
 import java.time.Instant
@@ -105,6 +108,68 @@ class SummariesServiceTest {
         assertNotNull(q2)
         assertEquals(0, q2!!.incomeBase.amount.compareTo(BigDecimal("100")))
         assertEquals(0, q2.vatOutput.amount.compareTo(BigDecimal("21")))
+    }
+
+    @Test
+    fun rentaSummaryReturnsNullWhenDisabled() {
+        val settings = Settings(
+            year = 2024,
+            startDate = LocalDate.parse("2024-01-01"),
+            ivaStd = IvaRate.STANDARD.toRate(),
+            irpfRate = Rate.fromDecimal("0.20"),
+            obligacion130 = false,
+            openingBalance = Money.ZERO,
+            expenseCategories = emptySet(),
+            rentaPlanning = RentaPlanningSettings(enabled = false)
+        )
+
+        val repo = FakeRecordsRepository()
+        val service = SummariesService(repo)
+
+        val response = service.rentaSummary("ws-1", settings)
+        assertNull(response.renta)
+    }
+
+    @Test
+    fun rentaSummaryComputesEstimateWhenEnabled() {
+        val settings = Settings(
+            year = 2024,
+            startDate = LocalDate.parse("2024-01-01"),
+            ivaStd = IvaRate.STANDARD.toRate(),
+            irpfRate = Rate.fromDecimal("0.20"),
+            obligacion130 = false,
+            openingBalance = Money.ZERO,
+            expenseCategories = emptySet(),
+            rentaPlanning = RentaPlanningSettings(enabled = true, taxYear = 2024, residence = IrpfTerritory.MADRID)
+        )
+
+        val invoicePayload = mapOf(
+            "invoiceDate" to "2024-06-10",
+            "number" to "INV-1",
+            "client" to "Acme",
+            "baseExclVat" to 1000.00,
+            "ivaRate" to "STANDARD",
+            "retencion" to "STANDARD",
+            "paymentDate" to "2024-06-20"
+        )
+        val payloadJson = JsonSupport.mapper.writeValueAsString(invoicePayload)
+        val recordItem = sampleItem(
+            workspaceId = "ws-1",
+            recordType = RecordType.INVOICE,
+            eventDate = LocalDate.parse("2024-06-20"),
+            payloadJson = payloadJson,
+            workspaceMonth = "WS#ws-1#M#2024-06",
+            workspaceQuarter = "WS#ws-1#Q#2024-Q2"
+        )
+
+        val repo = FakeRecordsRepository(
+            itemsByMonth = mapOf("WS#ws-1#M#2024-06" to listOf(recordItem))
+        )
+        val service = SummariesService(repo)
+
+        val response = service.rentaSummary("ws-1", settings)
+        assertNotNull(response.renta)
+        assertEquals(2024, response.renta!!.taxYear)
     }
 
     private class FakeRecordsRepository(

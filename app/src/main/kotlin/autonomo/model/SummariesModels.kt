@@ -2,6 +2,7 @@ package autonomo.model
 
 import autonomo.domain.MonthSummary
 import autonomo.domain.QuarterSummary
+import autonomo.domain.RentaEstimate
 import autonomo.domain.Settings
 
 data class MonthSummariesResponse(
@@ -14,3 +15,7 @@ data class QuarterSummariesResponse(
     val items: List<QuarterSummary>
 )
 
+data class RentaSummaryResponse(
+    val settings: Settings,
+    val renta: RentaEstimate?
+)
