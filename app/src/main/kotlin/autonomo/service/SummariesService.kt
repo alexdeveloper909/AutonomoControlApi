@@ -60,7 +60,14 @@ class SummariesService(
             payments = parsed.payments,
             asOfDate = LocalDate.now()
         )
-        return RentaSummaryResponse(settings = settings, renta = renta)
+        val rentaProjected: RentaEstimate? = RentaPlanner.estimateProjectedRunRate(
+            settings = settings,
+            invoices = parsed.invoices,
+            expenses = parsed.expenses,
+            payments = parsed.payments,
+            asOfDate = LocalDate.now()
+        )
+        return RentaSummaryResponse(settings = settings, renta = renta, rentaProjected = rentaProjected)
     }
 
     private fun loadYearRecordsByMonth(workspaceId: String, year: Int) =

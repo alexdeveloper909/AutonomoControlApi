@@ -17,5 +17,6 @@ data class QuarterSummariesResponse(
 
 data class RentaSummaryResponse(
     val settings: Settings,
-    val renta: RentaEstimate?
+    val renta: RentaEstimate?,
+    val rentaProjected: RentaEstimate?
 )

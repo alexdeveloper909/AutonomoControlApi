@@ -128,6 +128,7 @@ class SummariesServiceTest {
 
         val response = service.rentaSummary("ws-1", settings)
         assertNull(response.renta)
+        assertNull(response.rentaProjected)
     }
 
     @Test

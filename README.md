@@ -148,7 +148,7 @@ Summaries endpoints accept `autonomo.domain.Settings` (from `autonomo-control-co
 
 Responses include `items` with `monthKey` (`YYYY-MM`) or `quarterKey` (`{ "year": 2025, "quarter": 3 }`) plus calculated totals (cash flow, VAT/IRPF estimates, reserves).
 
-`POST /workspaces/{workspaceId}/summaries/renta` returns an annual IRPF estimate for planning when `settings.rentaPlanning.enabled=true` (otherwise `renta` is `null`).
+`POST /workspaces/{workspaceId}/summaries/renta` returns an annual IRPF estimate for planning when `settings.rentaPlanning.enabled=true` (otherwise `renta` is `null`). It may also include `rentaProjected` (run-rate projection) to provide earlier-year planning visibility.
 
 `eventDate` is derived by type:
 - Invoice: `paymentDate ?: invoiceDate`

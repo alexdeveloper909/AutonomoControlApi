@@ -80,7 +80,8 @@ class SummariesControllerTest {
         override fun rentaSummary(workspaceId: String, settings: Settings) =
             autonomo.model.RentaSummaryResponse(
                 settings = settings,
-                renta = null
+                renta = null,
+                rentaProjected = null
             )
     }
 
