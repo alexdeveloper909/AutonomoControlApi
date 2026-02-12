@@ -116,8 +116,7 @@ Body:
     "ivaStd": 0.21,
     "irpfRate": 0.20,
     "obligacion130": true,
-    "openingBalance": 200.00,
-    "expenseCategories": ["Software/SaaS", "Equipment", "Other"]
+    "openingBalance": 200.00
   }
 }
 ```
@@ -139,7 +138,6 @@ Summaries endpoints accept `autonomo.domain.Settings` (from `autonomo-control-co
   "irpfRate": 0.20,
   "obligacion130": true,
   "openingBalance": 200.00,
-  "expenseCategories": ["Software/SaaS", "Equipment", "Other"],
   "rentaPlanning": {
     "enabled": false
   }
@@ -222,6 +220,22 @@ ENV=dev DDB_TABLE_PREFIX=autonomo-control-dev ENVELOPE_KMS_KEY_ARN="arn:aws:kms:
   
 # static profile
 - AWS_PROFILE=tokarevalex ENV=dev DDB_TABLE_PREFIX=autonomo-control-dev ENVELOPE_KMS_KEY_ARN="arn:aws:kms:..." SENSITIVE_JSON_ENCRYPTION_ENABLED=true ./scripts/migrate_encrypt_sensitive_json.sh --dry-run --tables all
+```
+
+## Workspace settings cleanup migrations
+
+### Remove `expenseCategories` from workspace settings
+
+If you previously stored per-workspace expense category lists in `workspace_settings.settings_json`, you can remove that field:
+
+```bash
+# Dry run (shows counts only)
+ENV=dev DDB_TABLE_PREFIX=autonomo-control-dev SENSITIVE_JSON_ENCRYPTION_ENABLED=true ENVELOPE_KMS_KEY_ARN="arn:aws:kms:..." \
+  ./scripts/migrate_remove_expense_categories.sh --dry-run
+
+# Apply (rewrites workspace_settings.settings_json without expenseCategories)
+ENV=dev DDB_TABLE_PREFIX=autonomo-control-dev SENSITIVE_JSON_ENCRYPTION_ENABLED=true ENVELOPE_KMS_KEY_ARN="arn:aws:kms:..." \
+  ./scripts/migrate_remove_expense_categories.sh --apply
 ```
 
 ## Build

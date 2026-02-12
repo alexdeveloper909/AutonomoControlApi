@@ -45,8 +45,7 @@ class WorkspaceSettingsControllerTest {
             ivaStd = Rate.fromDecimal("0.21"),
             irpfRate = Rate.fromDecimal("0.20"),
             obligacion130 = true,
-            openingBalance = Money.ZERO,
-            expenseCategories = emptySet()
+            openingBalance = Money.ZERO
         )
 
         override fun putSettings(workspaceId: String, settings: Settings, updatedBy: String) = Unit
@@ -72,10 +71,8 @@ class WorkspaceSettingsControllerTest {
             ivaStd = Rate.fromDecimal("0.21"),
             irpfRate = Rate.fromDecimal("0.20"),
             obligacion130 = true,
-            openingBalance = Money.ZERO,
-            expenseCategories = emptySet()
+            openingBalance = Money.ZERO
         )
         return autonomo.config.JsonSupport.mapper.writeValueAsString(settings)
     }
 }
-

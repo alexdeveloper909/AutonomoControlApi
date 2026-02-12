@@ -30,8 +30,7 @@ class SummariesServiceTest {
             ivaStd = IvaRate.STANDARD.toRate(),
             irpfRate = Rate.fromDecimal("0.20"),
             obligacion130 = false,
-            openingBalance = Money.ZERO,
-            expenseCategories = emptySet()
+            openingBalance = Money.ZERO
         )
 
         val invoicePayload = mapOf(
@@ -74,8 +73,7 @@ class SummariesServiceTest {
             ivaStd = IvaRate.STANDARD.toRate(),
             irpfRate = Rate.fromDecimal("0.20"),
             obligacion130 = false,
-            openingBalance = Money.ZERO,
-            expenseCategories = emptySet()
+            openingBalance = Money.ZERO
         )
 
         val invoicePayload = mapOf(
@@ -119,7 +117,6 @@ class SummariesServiceTest {
             irpfRate = Rate.fromDecimal("0.20"),
             obligacion130 = false,
             openingBalance = Money.ZERO,
-            expenseCategories = emptySet(),
             rentaPlanning = RentaPlanningSettings(enabled = false)
         )
 
@@ -140,7 +137,6 @@ class SummariesServiceTest {
             irpfRate = Rate.fromDecimal("0.20"),
             obligacion130 = false,
             openingBalance = Money.ZERO,
-            expenseCategories = emptySet(),
             rentaPlanning = RentaPlanningSettings(enabled = true, taxYear = 2024, residence = IrpfTerritory.MADRID)
         )
 

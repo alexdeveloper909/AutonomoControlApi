@@ -103,7 +103,6 @@ class SummariesControllerTest {
             irpfRate = Rate.fromDecimal("0.20"),
             obligacion130 = true,
             openingBalance = Money.ZERO,
-            expenseCategories = emptySet(),
             rentaPlanning = null
         )
         return autonomo.config.JsonSupport.mapper.writeValueAsString(settings)

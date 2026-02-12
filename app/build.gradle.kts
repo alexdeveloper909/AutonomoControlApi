@@ -54,7 +54,7 @@ dependencies {
     implementation("com.fasterxml.jackson.core:jackson-databind:2.17.2")
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.17.2")
     implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.17.2")
-    implementation("com.alex:autonomo-control-core:1.2.4")
+    implementation("com.alex:autonomo-control-core:1.3.0")
 }
 
 testing {
@@ -84,6 +84,18 @@ tasks.register<JavaExec>("migrateEncryptSensitiveJson") {
         "Encrypt existing DynamoDB sensitive JSON fields (workspace_records.payload_json, workspace_settings.settings_json)."
     classpath = sourceSets["main"].runtimeClasspath
     mainClass.set("autonomo.cli.MigrateEncryptSensitiveJsonKt")
+
+    val rawArgs = (findProperty("cliArgs") as String?)?.trim().orEmpty()
+    if (rawArgs.isNotEmpty()) {
+        args = rawArgs.split(Regex("\\s+")).filter { it.isNotBlank() }
+    }
+}
+
+tasks.register<JavaExec>("migrateRemoveExpenseCategories") {
+    group = "application"
+    description = "Remove Settings.expenseCategories from workspace_settings.settings_json."
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("autonomo.cli.MigrateRemoveExpenseCategoriesKt")
 
     val rawArgs = (findProperty("cliArgs") as String?)?.trim().orEmpty()
     if (rawArgs.isNotEmpty()) {
