@@ -5,5 +5,6 @@ enum class RecordType {
     EXPENSE,
     STATE_PAYMENT,
     TRANSFER,
-    BUDGET
+    BUDGET,
+    REGULAR_SPENDING
 }

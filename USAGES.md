@@ -83,6 +83,36 @@ Success response (204): empty body.
 - `GET /workspaces/{workspaceId}/settings`
 - `PUT /workspaces/{workspaceId}/settings`
 
+## Regular spendings (recurring expenses)
+
+These endpoints are specialized helpers for “Regular spendings” UI screens.
+
+They are **read-only** and allowed for read-only shared workspace members (membership required).
+
+### List regular spending definitions
+
+- `GET /workspaces/{workspaceId}/regular-spendings`
+
+Success response (200):
+```json
+{ "items": [ /* RecordResponse with recordType=REGULAR_SPENDING */ ], "nextToken": null }
+```
+
+### List regular spending occurrences (date range)
+
+- `GET /workspaces/{workspaceId}/regular-spendings/occurrences?from=YYYY-MM-DD&to=YYYY-MM-DD`
+
+Success response (200):
+```json
+{
+  "from": "2026-02-01",
+  "to": "2026-02-28",
+  "items": [
+    { "recordId": "rec-1", "name": "Gym", "payoutDate": "2026-02-15", "amount": 29.99 }
+  ]
+}
+```
+
 ### Create record
 
 - `POST /workspaces/{workspaceId}/records`
@@ -135,7 +165,7 @@ Success response (204): empty body.
 ### List records by month
 
 - `GET /workspaces/{workspaceId}/records?month=YYYY-MM`
-- Optional filter: `recordType=INVOICE|EXPENSE|STATE_PAYMENT|TRANSFER|BUDGET`
+- Optional filter: `recordType=INVOICE|EXPENSE|STATE_PAYMENT|TRANSFER|BUDGET|REGULAR_SPENDING`
 - Optional sort: `sort=eventDateDesc`
 - Optional pagination: `limit=<1..200>&nextToken=<opaque>` (when `nextToken` is provided, `limit` is required)
 
@@ -147,7 +177,7 @@ Success response (200):
 ### List records by quarter
 
 - `GET /workspaces/{workspaceId}/records?quarter=YYYY-Q1`
-- Optional filter: `recordType=INVOICE|EXPENSE|STATE_PAYMENT|TRANSFER|BUDGET`
+- Optional filter: `recordType=INVOICE|EXPENSE|STATE_PAYMENT|TRANSFER|BUDGET|REGULAR_SPENDING`
 - Optional sort: `sort=eventDateDesc`
 - Optional pagination: `limit=<1..200>&nextToken=<opaque>` (when `nextToken` is provided, `limit` is required)
 
@@ -159,7 +189,7 @@ Success response (200):
 ### List records by year
 
 - `GET /workspaces/{workspaceId}/records?year=YYYY`
-- Optional filter: `recordType=INVOICE|EXPENSE|STATE_PAYMENT|TRANSFER|BUDGET`
+- Optional filter: `recordType=INVOICE|EXPENSE|STATE_PAYMENT|TRANSFER|BUDGET|REGULAR_SPENDING`
 - Optional sort: `sort=eventDateDesc`
 - Optional pagination: `limit=<1..200>&nextToken=<opaque>` (when `nextToken` is provided, `limit` is required)
 
@@ -268,6 +298,17 @@ All Money values are JSON numbers. All rate/percentage values are JSON numbers i
 }
 ```
 
+### RegularSpending (REGULAR_SPENDING)
+
+```json
+{
+  "name": "Gym",
+  "startDate": "2026-02-15",
+  "cadence": "MONTHLY",
+  "amount": 29.99
+}
+```
+
 ## Event date derivation
 
 `eventDate` is derived from the payload:
@@ -277,6 +318,7 @@ All Money values are JSON numbers. All rate/percentage values are JSON numbers i
 - StatePayment: `paymentDate`
 - Transfer: `date`
 - BudgetEntry: `monthKey.firstDay()` (stored as `YYYY-MM-01`)
+- RegularSpending: `startDate`
 
 For updates, the `eventDate` in the path must match the existing record key.
 
@@ -326,6 +368,8 @@ Required routes (CDK deploys these explicitly; add more when you add new endpoin
 - `GET /workspaces/{workspaceId}/settings`
 - `PUT /workspaces/{workspaceId}/settings`
 - `POST /workspaces/{workspaceId}/share`
+- `GET /workspaces/{workspaceId}/regular-spendings`
+- `GET /workspaces/{workspaceId}/regular-spendings/occurrences`
 - `POST /workspaces/{workspaceId}/records`
 - `GET /workspaces/{workspaceId}/records`
 - `POST /workspaces/{workspaceId}/summaries/months`

@@ -4,6 +4,7 @@ import autonomo.config.JsonSupport
 import autonomo.domain.BudgetEntry
 import autonomo.domain.Expense
 import autonomo.domain.Invoice
+import autonomo.domain.RegularSpending
 import autonomo.domain.StatePayment
 import autonomo.domain.Transfer
 import autonomo.model.RecordType
@@ -18,6 +19,7 @@ object RecordPayloadParser {
             RecordType.STATE_PAYMENT -> JsonSupport.mapper.treeToValue(payload, StatePayment::class.java)
             RecordType.TRANSFER -> JsonSupport.mapper.treeToValue(payload, Transfer::class.java)
             RecordType.BUDGET -> JsonSupport.mapper.treeToValue(payload, BudgetEntry::class.java)
+            RecordType.REGULAR_SPENDING -> JsonSupport.mapper.treeToValue(payload, RegularSpending::class.java)
         }
     }
 
@@ -34,6 +36,7 @@ object RecordPayloadParser {
             RecordType.STATE_PAYMENT -> (payload as StatePayment).paymentDate
             RecordType.TRANSFER -> (payload as Transfer).date
             RecordType.BUDGET -> (payload as BudgetEntry).monthKey.firstDay()
+            RecordType.REGULAR_SPENDING -> (payload as RegularSpending).startDate
         }
     }
 

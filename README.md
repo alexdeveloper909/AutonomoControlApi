@@ -1,6 +1,6 @@
 # AutonomoControlApi
 
-Kotlin serverless API for workspace-scoped financial records (Invoice, Expense, StatePayment, Transfer, BudgetEntry). The code is layered so Lambda handlers are thin and business logic is testable.
+Kotlin serverless API for workspace-scoped financial records (Invoice, Expense, StatePayment, Transfer, BudgetEntry, RegularSpending). The code is layered so Lambda handlers are thin and business logic is testable.
 
 ## License
 
@@ -53,6 +53,8 @@ in the Lambda handler/controller, also add the corresponding route in the CDK st
 - `POST /workspaces/{workspaceId}/summaries/months`
 - `POST /workspaces/{workspaceId}/summaries/quarters`
 - `POST /workspaces/{workspaceId}/summaries/renta`
+- `GET /workspaces/{workspaceId}/regular-spendings`
+- `GET /workspaces/{workspaceId}/regular-spendings/occurrences?from=YYYY-MM-DD&to=YYYY-MM-DD`
 - `POST /workspaces/{workspaceId}/records`
   - body:
     ```json
@@ -154,6 +156,7 @@ Responses include `items` with `monthKey` (`YYYY-MM`) or `quarterKey` (`{ "year"
 - StatePayment: `paymentDate`
 - Transfer: `date`
 - BudgetEntry: `monthKey.firstDay()`
+- RegularSpending: `startDate`
 
 Records listing:
 - Exactly one of `month=YYYY-MM`, `quarter=YYYY-Qx`, or `year=YYYY` is required.

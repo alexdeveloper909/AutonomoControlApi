@@ -104,6 +104,7 @@ class SummariesService(
                 RecordType.STATE_PAYMENT -> payments += (RecordPayloadParser.parse(item.recordType, payloadNode) as StatePayment)
                 RecordType.TRANSFER -> transfers += (RecordPayloadParser.parse(item.recordType, payloadNode) as Transfer)
                 RecordType.BUDGET -> Unit
+                RecordType.REGULAR_SPENDING -> Unit
             }
         }
 

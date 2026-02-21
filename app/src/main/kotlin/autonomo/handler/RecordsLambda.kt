@@ -1,6 +1,7 @@
 package autonomo.handler
 
 import autonomo.controller.RecordsController
+import autonomo.controller.RegularSpendingsController
 import autonomo.controller.SummariesController
 import autonomo.controller.UsersController
 import autonomo.controller.WorkspaceSharingController
@@ -18,6 +19,7 @@ import com.amazonaws.services.lambda.runtime.events.APIGatewayV2HTTPResponse
 class RecordsLambda : RequestHandler<APIGatewayV2HTTPEvent, APIGatewayV2HTTPResponse> {
     private val controller = RecordsController()
     private val summariesController = SummariesController()
+    private val regularSpendingsController = RegularSpendingsController()
     private val workspacesController = WorkspacesController()
     private val workspaceSettingsController = WorkspaceSettingsController()
     private val workspaceSharingController = WorkspaceSharingController()
@@ -105,6 +107,17 @@ class RecordsLambda : RequestHandler<APIGatewayV2HTTPEvent, APIGatewayV2HTTPResp
             val workspaceId = segments.getOrNull(1)
             return when (method) {
                 "POST" -> workspaceSharingController.shareReadOnly(workspaceId, event.body, user)
+                else -> HttpResponses.notFound("Route not found")
+            }
+        }
+
+        if (segments.size >= 3 && segments[0] == "workspaces" && segments[2] == "regular-spendings") {
+            val workspaceId = segments.getOrNull(1)
+            return when {
+                segments.size == 3 && method == "GET" ->
+                    regularSpendingsController.listDefinitions(workspaceId, user)
+                segments.size == 4 && segments[3] == "occurrences" && method == "GET" ->
+                    regularSpendingsController.listOccurrences(workspaceId, event.queryStringParameters ?: emptyMap(), user)
                 else -> HttpResponses.notFound("Route not found")
             }
         }
