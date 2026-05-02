@@ -56,6 +56,9 @@ class RecordsService(
     ): RecordResponse {
         val payload = RecordPayloadParser.parse(request.recordType, request.payload)
         val eventDate = RecordPayloadParser.eventDate(request.recordType, payload)
+        if (request.recordType == RecordType.BUDGET) {
+            ensureBudgetMonthIsUnique(workspaceId, eventDate)
+        }
         val recordId = request.recordId ?: UUID.randomUUID().toString()
         val recordKey = RecordKey.build(request.recordType, eventDate, recordId)
         val now = Instant.now()
@@ -98,7 +101,11 @@ class RecordsService(
         val payload = RecordPayloadParser.parse(recordType, request.payload)
         val derivedEventDate = RecordPayloadParser.eventDate(recordType, payload)
         require(derivedEventDate == eventDate) {
-            "eventDate must match the existing recordKey"
+            if (recordType == RecordType.BUDGET) {
+                "Budget month cannot be changed"
+            } else {
+                "eventDate must match the existing recordKey"
+            }
         }
 
         val now = Instant.now()
@@ -219,6 +226,13 @@ class RecordsService(
             createdBy = item.createdBy,
             updatedBy = item.updatedBy
         )
+    }
+
+    private fun ensureBudgetMonthIsUnique(workspaceId: String, eventDate: LocalDate) {
+        val existing = repository.queryByWorkspaceRecordKeyPrefix(workspaceId, "${RecordType.BUDGET.name}#$eventDate#")
+        if (existing.isNotEmpty()) {
+            throw RecordConflictException("Budget entry already exists for ${eventDate.toString().substring(0, 7)}")
+        }
     }
 
     private fun workspaceMonthKey(workspaceId: String, eventDate: LocalDate): String {

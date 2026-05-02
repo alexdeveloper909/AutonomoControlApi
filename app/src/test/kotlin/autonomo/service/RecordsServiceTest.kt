@@ -1,5 +1,7 @@
 package autonomo.service
 
+import autonomo.config.JsonSupport
+import autonomo.model.RecordRequest
 import autonomo.model.RecordItem
 import autonomo.model.RecordType
 import autonomo.repository.WorkspaceRecordsRepositoryPort
@@ -162,16 +164,107 @@ class RecordsServiceTest {
         assertEquals(listOf("INVOICE#2024-"), repo.queriedPrefixes)
     }
 
+    @Test
+    fun createBudgetRecordStoresNormalizedSpentPayload() {
+        val repo = FakeRecordsRepository()
+        val service = RecordsService(repo)
+        val payload = JsonSupport.mapper.readTree(
+            """
+            {
+              "monthKey": "2026-03",
+              "plannedSpend": 2000.00,
+              "earned": 2500.00,
+              "description": "March review"
+            }
+            """.trimIndent()
+        )
+
+        val response = service.createRecord(
+            workspaceId = "ws-1",
+            userId = "user-1",
+            request = RecordRequest(recordType = RecordType.BUDGET, payload = payload)
+        )
+
+        val storedPayload = JsonSupport.mapper.readTree(repo.created.single().payloadJson)
+        assertEquals(LocalDate.parse("2026-03-01"), response.eventDate)
+        assertEquals(0, storedPayload.get("spent").decimalValue().compareTo(java.math.BigDecimal("2000.00")))
+        assertEquals("March review", storedPayload.get("notes").asText())
+        assertEquals(false, storedPayload.has("plannedSpend"))
+    }
+
+    @Test
+    fun createBudgetRecordRejectsDuplicateMonth() {
+        val existing = sampleItem(RecordType.BUDGET, LocalDate.parse("2026-03-01"), "rec-existing")
+        val repo = FakeRecordsRepository(
+            itemsByRecordKeyPrefix = mapOf("BUDGET#2026-03-01#" to listOf(existing))
+        )
+        val service = RecordsService(repo)
+        val payload = JsonSupport.mapper.readTree(
+            """
+            {
+              "monthKey": "2026-03",
+              "spent": 2000.00,
+              "earned": 2500.00
+            }
+            """.trimIndent()
+        )
+
+        val error = assertThrows<RecordConflictException> {
+            service.createRecord(
+                workspaceId = "ws-1",
+                userId = "user-1",
+                request = RecordRequest(recordType = RecordType.BUDGET, payload = payload)
+            )
+        }
+
+        assertEquals("Budget entry already exists for 2026-03", error.message)
+    }
+
+    @Test
+    fun updateBudgetRecordRejectsMonthKeyChanges() {
+        val existing = sampleItem(RecordType.BUDGET, LocalDate.parse("2026-03-01"), "rec-1")
+        val repo = FakeRecordsRepository(itemsByGetKey = mapOf(existing.recordKey to existing))
+        val service = RecordsService(repo)
+        val payload = JsonSupport.mapper.readTree(
+            """
+            {
+              "monthKey": "2026-04",
+              "spent": 2000.00,
+              "earned": 2500.00
+            }
+            """.trimIndent()
+        )
+
+        val error = assertThrows<IllegalArgumentException> {
+            service.updateRecord(
+                workspaceId = "ws-1",
+                userId = "user-1",
+                recordType = RecordType.BUDGET,
+                eventDate = LocalDate.parse("2026-03-01"),
+                recordId = "rec-1",
+                request = RecordRequest(recordType = RecordType.BUDGET, payload = payload)
+            )
+        }
+
+        assertEquals("Budget month cannot be changed", error.message)
+    }
+
     private class FakeRecordsRepository(
         private val itemsByMonth: Map<String, List<RecordItem>> = emptyMap(),
         private val itemsByQuarter: Map<String, List<RecordItem>> = emptyMap(),
-        private val itemsByRecordKeyPrefix: Map<String, List<RecordItem>> = emptyMap()
+        private val itemsByRecordKeyPrefix: Map<String, List<RecordItem>> = emptyMap(),
+        private val itemsByGetKey: Map<String, RecordItem> = emptyMap()
     ) : WorkspaceRecordsRepositoryPort {
         val queriedPrefixes = mutableListOf<String>()
+        val created = mutableListOf<RecordItem>()
 
-        override fun create(record: RecordItem) = throw UnsupportedOperationException()
-        override fun update(record: RecordItem) = throw UnsupportedOperationException()
-        override fun get(workspaceId: String, recordKey: String): RecordItem? = throw UnsupportedOperationException()
+        override fun create(record: RecordItem) {
+            created += record
+        }
+
+        override fun update(record: RecordItem) = Unit
+
+        override fun get(workspaceId: String, recordKey: String): RecordItem? = itemsByGetKey[recordKey]
         override fun delete(workspaceId: String, recordKey: String) = throw UnsupportedOperationException()
         override fun deleteByWorkspaceId(workspaceId: String) = throw UnsupportedOperationException()
         override fun setTtlByWorkspaceId(workspaceId: String, ttlEpoch: Long) = throw UnsupportedOperationException()

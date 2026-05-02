@@ -1,5 +1,6 @@
 package autonomo.util
 
+import autonomo.config.JsonSupport
 import autonomo.domain.BudgetEntry
 import autonomo.domain.Expense
 import autonomo.domain.Invoice
@@ -14,6 +15,7 @@ import autonomo.domain.Transfer
 import autonomo.domain.TransferOp
 import autonomo.model.RecordType
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Test
 import java.math.BigDecimal
 import java.time.LocalDate
@@ -57,15 +59,106 @@ class RecordPayloadParserTest {
     fun budgetEventDateUsesMonthKeyFirstDay() {
         val budget = BudgetEntry(
             monthKey = MonthKey.of(2024, 7),
-            plannedSpend = Money(BigDecimal("1000")),
+            spent = Money(BigDecimal("1000")),
             earned = Money(BigDecimal("1200")),
-            description = "Summer",
-            budgetGoal = "Save"
+            targetSpend = Money(BigDecimal("900")),
+            notes = "Summer",
+            exceptionalSpend = Money(BigDecimal("100")),
+            exceptionalNotes = "Flights"
         )
 
         val eventDate = RecordPayloadParser.eventDate(RecordType.BUDGET, budget)
 
         assertEquals(LocalDate.parse("2024-07-01"), eventDate)
+    }
+
+    @Test
+    fun parsesBudgetPayloadWithNewFields() {
+        val payload = JsonSupport.mapper.readTree(
+            """
+            {
+              "monthKey": "2026-04",
+              "spent": 4111.00,
+              "earned": 5717.00,
+              "targetSpend": 3000.00,
+              "notes": "Heavy spending month.",
+              "exceptionalSpend": 809.00,
+              "exceptionalNotes": "Lenses and insurance."
+            }
+            """.trimIndent()
+        )
+
+        val budget = RecordPayloadParser.parse(RecordType.BUDGET, payload) as BudgetEntry
+
+        assertEquals(MonthKey.of(2026, 4), budget.monthKey)
+        assertMoneyEquals("4111.00", budget.spent)
+        assertMoneyEquals("5717.00", budget.earned)
+        assertMoneyEquals("3000.00", budget.targetSpend!!)
+        assertEquals("Heavy spending month.", budget.notes)
+        assertMoneyEquals("809.00", budget.exceptionalSpend!!)
+        assertEquals("Lenses and insurance.", budget.exceptionalNotes)
+    }
+
+    @Test
+    fun parsesBudgetPayloadWithLegacyFields() {
+        val payload = JsonSupport.mapper.readTree(
+            """
+            {
+              "monthKey": "2024-07",
+              "plannedSpend": 2000.00,
+              "earned": 2500.00,
+              "description": "Summer budget",
+              "budgetGoal": "Save for tax"
+            }
+            """.trimIndent()
+        )
+
+        val budget = RecordPayloadParser.parse(RecordType.BUDGET, payload) as BudgetEntry
+
+        assertEquals(MonthKey.of(2024, 7), budget.monthKey)
+        assertMoneyEquals("2000.00", budget.spent)
+        assertMoneyEquals("2500.00", budget.earned)
+        assertEquals("Summer budget", budget.notes)
+    }
+
+    @Test
+    fun parsesBudgetPayloadPreferringSpentOverLegacyPlannedSpend() {
+        val payload = JsonSupport.mapper.readTree(
+            """
+            {
+              "monthKey": "2024-07",
+              "spent": 2100.00,
+              "plannedSpend": 2000.00,
+              "earned": 2500.00
+            }
+            """.trimIndent()
+        )
+
+        val budget = RecordPayloadParser.parse(RecordType.BUDGET, payload) as BudgetEntry
+
+        assertMoneyEquals("2100.00", budget.spent)
+    }
+
+    @Test
+    fun serializesBudgetPayloadWithNormalizedSpent() {
+        val budget = BudgetEntry(
+            monthKey = MonthKey.of(2026, 4),
+            spent = Money(BigDecimal("4111.00")),
+            earned = Money(BigDecimal("5717.00")),
+            targetSpend = Money(BigDecimal("3000.00")),
+            notes = "Heavy spending month.",
+            exceptionalSpend = Money(BigDecimal("809.00")),
+            exceptionalNotes = "Lenses and insurance."
+        )
+
+        val json = JsonSupport.mapper.readTree(RecordPayloadParser.toJson(budget))
+
+        assertEquals(0, json.get("spent").decimalValue().compareTo(BigDecimal("4111.00")))
+        assertFalse(json.has("plannedSpend"))
+        assertEquals(0, json.get("targetSpend").decimalValue().compareTo(BigDecimal("3000.00")))
+        assertEquals("Heavy spending month.", json.get("notes").asText())
+        assertEquals(0, json.get("exceptionalSpend").decimalValue().compareTo(BigDecimal("809.00")))
+        assertEquals("Lenses and insurance.", json.get("exceptionalNotes").asText())
     }
 
     @Test
@@ -93,5 +186,9 @@ class RecordPayloadParserTest {
         val eventDate = RecordPayloadParser.eventDate(RecordType.TRANSFER, transfer)
 
         assertEquals(LocalDate.parse("2024-09-01"), eventDate)
+    }
+
+    private fun assertMoneyEquals(expected: String, actual: Money) {
+        assertEquals(0, actual.amount.compareTo(BigDecimal(expected)))
     }
 }

@@ -291,12 +291,25 @@ All Money values are JSON numbers. All rate/percentage values are JSON numbers i
 ```json
 {
   "monthKey": "2024-07",
-  "plannedSpend": 2000.00,
+  "spent": 2000.00,
   "earned": 2500.00,
-  "description": "Summer budget",
-  "budgetGoal": "Save for tax"
+  "targetSpend": 1800.00,
+  "notes": "Summer budget",
+  "exceptionalSpend": 150.00,
+  "exceptionalNotes": "One-off travel"
 }
 ```
+
+Compatibility:
+
+- `spent` is the normalized field for new writes.
+- Legacy clients may continue sending `plannedSpend`; when both `spent` and `plannedSpend` are present, `spent` wins.
+- `earned` remains user-entered and is not derived from summaries.
+- Existing payloads with `description` remain readable as legacy notes.
+- Existing payloads with `budgetGoal` remain readable for compatibility; new numeric targets should use `targetSpend`.
+- `targetSpend` and `exceptionalSpend`, when present, must be `>= 0`.
+- `exceptionalSpend`, when present, must be less than or equal to `spent`.
+- Only one `BUDGET` record may exist per workspace/month. Duplicate creates return `409 Conflict`.
 
 ### RegularSpending (REGULAR_SPENDING)
 
@@ -321,6 +334,7 @@ All Money values are JSON numbers. All rate/percentage values are JSON numbers i
 - RegularSpending: `startDate`
 
 For updates, the `eventDate` in the path must match the existing record key.
+For BudgetEntry updates, this means `monthKey` cannot be changed.
 
 ## Error responses
 
@@ -335,7 +349,7 @@ Common errors:
 - 401: missing/invalid JWT authorizer.
 - 403: user is not a member of the workspace.
 - 404: record not found.
-- 409: create conflict when `recordKey` already exists.
+- 409: create conflict when `recordKey` already exists, or when a `BUDGET` entry already exists for the same workspace/month.
 
 ## Workspace membership checks
 

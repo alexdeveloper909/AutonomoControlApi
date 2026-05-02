@@ -109,6 +109,84 @@ class SummariesServiceTest {
     }
 
     @Test
+    fun monthSummariesIgnoreBudgetRecords() {
+        val settings = Settings(
+            year = 2024,
+            startDate = LocalDate.parse("2024-01-01"),
+            ivaStd = IvaRate.STANDARD.toRate(),
+            irpfRate = Rate.fromDecimal("0.20"),
+            obligacion130 = false,
+            openingBalance = Money.ZERO
+        )
+
+        val budgetPayload = mapOf(
+            "monthKey" to "2024-06",
+            "spent" to 2000.00,
+            "earned" to 2500.00,
+            "targetSpend" to 1800.00,
+            "exceptionalSpend" to 100.00
+        )
+        val budgetItem = sampleItem(
+            workspaceId = "ws-1",
+            recordType = RecordType.BUDGET,
+            eventDate = LocalDate.parse("2024-06-01"),
+            payloadJson = JsonSupport.mapper.writeValueAsString(budgetPayload),
+            workspaceMonth = "WS#ws-1#M#2024-06",
+            workspaceQuarter = "WS#ws-1#Q#2024-Q2"
+        )
+
+        val repo = FakeRecordsRepository(
+            itemsByMonth = mapOf("WS#ws-1#M#2024-06" to listOf(budgetItem))
+        )
+        val service = SummariesService(repo)
+
+        val response = service.monthSummaries("ws-1", settings)
+        val june = response.items.firstOrNull { it.monthKey == MonthKey.of(2024, 6) }
+        assertNotNull(june)
+        assertEquals(0, june!!.incomeBase.amount.compareTo(BigDecimal.ZERO))
+        assertEquals(0, june.expenseDeductibleBase.amount.compareTo(BigDecimal.ZERO))
+        assertEquals(0, june.vatOutput.amount.compareTo(BigDecimal.ZERO))
+    }
+
+    @Test
+    fun quarterSummariesIgnoreBudgetRecords() {
+        val settings = Settings(
+            year = 2024,
+            startDate = LocalDate.parse("2024-01-01"),
+            ivaStd = IvaRate.STANDARD.toRate(),
+            irpfRate = Rate.fromDecimal("0.20"),
+            obligacion130 = false,
+            openingBalance = Money.ZERO
+        )
+
+        val budgetPayload = mapOf(
+            "monthKey" to "2024-06",
+            "spent" to 2000.00,
+            "earned" to 2500.00
+        )
+        val budgetItem = sampleItem(
+            workspaceId = "ws-1",
+            recordType = RecordType.BUDGET,
+            eventDate = LocalDate.parse("2024-06-01"),
+            payloadJson = JsonSupport.mapper.writeValueAsString(budgetPayload),
+            workspaceMonth = "WS#ws-1#M#2024-06",
+            workspaceQuarter = "WS#ws-1#Q#2024-Q2"
+        )
+
+        val repo = FakeRecordsRepository(
+            itemsByQuarter = mapOf("WS#ws-1#Q#2024-Q2" to listOf(budgetItem))
+        )
+        val service = SummariesService(repo)
+
+        val response = service.quarterSummaries("ws-1", settings)
+        val q2 = response.items.firstOrNull { it.quarterKey.year == 2024 && it.quarterKey.quarter == 2 }
+        assertNotNull(q2)
+        assertEquals(0, q2!!.incomeBase.amount.compareTo(BigDecimal.ZERO))
+        assertEquals(0, q2.expenseDeductibleBase.amount.compareTo(BigDecimal.ZERO))
+        assertEquals(0, q2.vatOutput.amount.compareTo(BigDecimal.ZERO))
+    }
+
+    @Test
     fun rentaSummaryReturnsNullWhenDisabled() {
         val settings = Settings(
             year = 2024,
