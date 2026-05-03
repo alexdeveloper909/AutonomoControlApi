@@ -52,6 +52,7 @@ in the Lambda handler/controller, also add the corresponding route in the CDK st
 - `PUT /workspaces/{workspaceId}/settings`
 - `POST /workspaces/{workspaceId}/summaries/months`
 - `POST /workspaces/{workspaceId}/summaries/quarters`
+- `POST /workspaces/{workspaceId}/summaries/iva`
 - `POST /workspaces/{workspaceId}/summaries/renta`
 - `GET /workspaces/{workspaceId}/regular-spendings`
 - `GET /workspaces/{workspaceId}/regular-spendings/occurrences?from=YYYY-MM-DD&to=YYYY-MM-DD`
@@ -140,13 +141,23 @@ Summaries endpoints accept `autonomo.domain.Settings` (from `autonomo-control-co
   "irpfRate": 0.20,
   "obligacion130": true,
   "openingBalance": 200.00,
+  "ivaProfile": {
+    "hasVatDeductionRight": "FULL",
+    "defaultExpenseVatDeductible": true,
+    "defaultExpenseVatDeductiblePercentage": 1.00,
+    "defaultIrpfDeductiblePercentage": 1.00,
+    "q4NegativeVatDefaultAction": "CARRY_FORWARD",
+    "openingVatCredit": 0.00
+  },
   "rentaPlanning": {
     "enabled": false
   }
 }
 ```
 
-Responses include `items` with `monthKey` (`YYYY-MM`) or `quarterKey` (`{ "year": 2025, "quarter": 3 }`) plus calculated totals (cash flow, VAT/IRPF estimates, reserves).
+Responses include `items` with `monthKey` (`YYYY-MM`) or `quarterKey` (`{ "year": 2025, "quarter": 3 }`) plus calculated totals (cash flow, VAT/IRPF estimates, reserves). Quarter summaries include the cumulative filing-oriented `modelo130DueThisQuarter` from core.
+
+`POST /workspaces/{workspaceId}/summaries/iva` returns `{ "settings": ..., "iva": IvaYearEstimate }`, including quarter-by-quarter output IVA, deductible input IVA, payable amount, credit carry-forward, and Q4 refund/carry-forward candidate fields.
 
 `POST /workspaces/{workspaceId}/summaries/renta` returns an annual IRPF estimate for planning when `settings.rentaPlanning.enabled=true` (otherwise `renta` is `null`). It may also include `rentaProjected` (run-rate projection) to provide earlier-year planning visibility.
 

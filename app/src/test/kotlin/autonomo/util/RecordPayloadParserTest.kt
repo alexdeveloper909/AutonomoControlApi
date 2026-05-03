@@ -7,6 +7,7 @@ import autonomo.domain.Invoice
 import autonomo.domain.IvaRate
 import autonomo.domain.Money
 import autonomo.domain.MonthKey
+import autonomo.domain.Percentage
 import autonomo.domain.Rate
 import autonomo.domain.RetencionRate
 import autonomo.domain.StatePayment
@@ -16,6 +17,7 @@ import autonomo.domain.TransferOp
 import autonomo.model.RecordType
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
 import java.math.BigDecimal
 import java.time.LocalDate
@@ -188,7 +190,108 @@ class RecordPayloadParserTest {
         assertEquals(LocalDate.parse("2024-09-01"), eventDate)
     }
 
+    @Test
+    fun parsesLegacyExpensePayload() {
+        val payload = JsonSupport.mapper.readTree(
+            """
+            {
+              "documentDate": "2024-06-05",
+              "vendor": "Vendor",
+              "category": "Software",
+              "baseExclVat": 100.00,
+              "ivaRate": "STANDARD",
+              "vatRecoverableFlag": false,
+              "deductibleShare": 0.50
+            }
+            """.trimIndent()
+        )
+
+        val expense = RecordPayloadParser.parse(RecordType.EXPENSE, payload) as Expense
+
+        assertMoneyEquals("0.00", expense.vatRecoverable)
+        assertMoneyEquals("71.00", expense.expenseForIrpf)
+        assertPercentageEquals("0.50", expense.irpfDeductiblePercentage)
+    }
+
+    @Test
+    fun parsesNewExpensePayload() {
+        val payload = JsonSupport.mapper.readTree(
+            """
+            {
+              "documentDate": "2024-06-05",
+              "vendor": "Vendor",
+              "category": "Software",
+              "baseExclVat": 100.00,
+              "ivaRate": "STANDARD",
+              "vatRecoverableFlag": true,
+              "deductibleShare": 1.00,
+              "ivaDeductiblePercentage": 0.50,
+              "irpfDeductiblePercentage": 0.75
+            }
+            """.trimIndent()
+        )
+
+        val expense = RecordPayloadParser.parse(RecordType.EXPENSE, payload) as Expense
+
+        assertPercentageEquals("0.50", expense.effectiveIvaDeductiblePercentage)
+        assertPercentageEquals("0.75", expense.irpfDeductiblePercentage)
+        assertMoneyEquals("10.5000", expense.vatRecoverable)
+        assertMoneyEquals("85.5000", expense.expenseForIrpf)
+    }
+
+    @Test
+    fun mixedExpensePayloadPrefersNewPercentages() {
+        val payload = JsonSupport.mapper.readTree(
+            """
+            {
+              "documentDate": "2024-06-05",
+              "vendor": "Vendor",
+              "category": "Software",
+              "baseExclVat": 100.00,
+              "ivaRate": "STANDARD",
+              "vatRecoverableFlag": false,
+              "deductibleShare": 0.25,
+              "ivaDeductiblePercentage": 1.00,
+              "irpfDeductiblePercentage": 0.80
+            }
+            """.trimIndent()
+        )
+
+        val expense = RecordPayloadParser.parse(RecordType.EXPENSE, payload) as Expense
+
+        assertPercentageEquals("1.00", expense.effectiveIvaDeductiblePercentage)
+        assertPercentageEquals("0.80", expense.irpfDeductiblePercentage)
+        assertMoneyEquals("21.0000", expense.vatRecoverable)
+        assertMoneyEquals("80.0000", expense.expenseForIrpf)
+    }
+
+    @Test
+    fun rejectsInvalidExpensePercentages() {
+        val payload = JsonSupport.mapper.readTree(
+            """
+            {
+              "documentDate": "2024-06-05",
+              "vendor": "Vendor",
+              "category": "Software",
+              "baseExclVat": 100.00,
+              "ivaRate": "STANDARD",
+              "vatRecoverableFlag": true,
+              "deductibleShare": 1.00,
+              "ivaDeductiblePercentage": 1.20
+            }
+            """.trimIndent()
+        )
+
+        assertThrows(Exception::class.java) {
+            RecordPayloadParser.parse(RecordType.EXPENSE, payload)
+        }
+    }
+
     private fun assertMoneyEquals(expected: String, actual: Money) {
         assertEquals(0, actual.amount.compareTo(BigDecimal(expected)))
+    }
+
+    private fun assertPercentageEquals(expected: String, actual: Percentage) {
+        assertEquals(0, actual.value.compareTo(BigDecimal(expected)))
     }
 }

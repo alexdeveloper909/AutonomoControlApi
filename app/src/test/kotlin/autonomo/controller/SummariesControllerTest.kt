@@ -64,6 +64,17 @@ class SummariesControllerTest {
         assertTrue(response.body?.contains("\"renta\"") == true)
     }
 
+    @Test
+    fun ivaSummaryReturns200() {
+        val controller = SummariesController(FakeSummariesService(), FakeAccessService(true))
+        val body = settingsJson(year = 2024)
+
+        val response = controller.ivaSummary("ws-1", body, UserContext("user-1", "user@example.com"))
+
+        assertEquals(200, response.statusCode)
+        assertTrue(response.body?.contains("\"iva\"") == true)
+    }
+
     private class FakeSummariesService : SummariesServicePort {
         override fun monthSummaries(workspaceId: String, settings: Settings) =
             autonomo.model.MonthSummariesResponse(
@@ -75,6 +86,12 @@ class SummariesControllerTest {
             autonomo.model.QuarterSummariesResponse(
                 settings = settings,
                 items = emptyList()
+            )
+
+        override fun ivaSummary(workspaceId: String, settings: Settings) =
+            autonomo.model.IvaSummaryResponse(
+                settings = settings,
+                iva = autonomo.domain.IvaYearEstimate(year = settings.year, quarters = emptyList())
             )
 
         override fun rentaSummary(workspaceId: String, settings: Settings) =

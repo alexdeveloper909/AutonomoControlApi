@@ -1,14 +1,19 @@
 package autonomo.controller
 
 import autonomo.domain.Money
+import autonomo.domain.IvaDeductionProfile
+import autonomo.domain.Q4NegativeVatAction
 import autonomo.domain.Rate
 import autonomo.domain.Settings
+import autonomo.domain.VatDeductionRight
 import autonomo.model.UserContext
 import autonomo.service.WorkspaceAccessPort
 import autonomo.service.WorkspaceSettingsServicePort
 import autonomo.util.ApiError
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import java.math.BigDecimal
 import java.time.LocalDate
 
 class WorkspaceSettingsControllerTest {
@@ -36,6 +41,21 @@ class WorkspaceSettingsControllerTest {
         val response = controller.getSettings("ws-1", UserContext("user-1", "user@example.com"))
 
         assertEquals(200, response.statusCode)
+    }
+
+    @Test
+    fun putSettingsAcceptsIvaProfileFields() {
+        val controller = WorkspaceSettingsController(
+            service = FakeSettingsService(),
+            access = FakeAccessService(canAccess = true, canWrite = true)
+        )
+
+        val response = controller.putSettings("ws-1", settingsJsonWithIvaProfile(2025), UserContext("user-1", "user@example.com"))
+
+        assertEquals(200, response.statusCode)
+        assertTrue(response.body?.contains("\"ivaProfile\"") == true)
+        assertTrue(response.body?.contains("\"PARTIAL\"") == true)
+        assertTrue(response.body?.contains("\"REQUEST_REFUND\"") == true)
     }
 
     private class FakeSettingsService : WorkspaceSettingsServicePort {
@@ -72,6 +92,26 @@ class WorkspaceSettingsControllerTest {
             irpfRate = Rate.fromDecimal("0.20"),
             obligacion130 = true,
             openingBalance = Money.ZERO
+        )
+        return autonomo.config.JsonSupport.mapper.writeValueAsString(settings)
+    }
+
+    private fun settingsJsonWithIvaProfile(year: Int): String {
+        val settings = Settings(
+            year = year,
+            startDate = LocalDate.of(year, 1, 1),
+            ivaStd = Rate.fromDecimal("0.21"),
+            irpfRate = Rate.fromDecimal("0.20"),
+            obligacion130 = true,
+            openingBalance = Money.ZERO,
+            ivaProfile = IvaDeductionProfile(
+                hasVatDeductionRight = VatDeductionRight.PARTIAL,
+                defaultExpenseVatDeductible = true,
+                defaultExpenseVatDeductiblePercentage = Rate.fromDecimal("0.50"),
+                defaultIrpfDeductiblePercentage = Rate.fromDecimal("0.80"),
+                q4NegativeVatDefaultAction = Q4NegativeVatAction.REQUEST_REFUND,
+                openingVatCredit = Money(BigDecimal("25.00"))
+            )
         )
         return autonomo.config.JsonSupport.mapper.writeValueAsString(settings)
     }

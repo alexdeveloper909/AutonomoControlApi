@@ -4,6 +4,7 @@ import autonomo.config.JsonSupport
 import autonomo.domain.DefaultDomainService
 import autonomo.domain.Expense
 import autonomo.domain.Invoice
+import autonomo.domain.IvaYearEstimate
 import autonomo.domain.MonthSummary
 import autonomo.domain.QuarterSummary
 import autonomo.domain.RentaEstimate
@@ -12,6 +13,7 @@ import autonomo.domain.Settings
 import autonomo.domain.StatePayment
 import autonomo.domain.Transfer
 import autonomo.model.MonthSummariesResponse
+import autonomo.model.IvaSummaryResponse
 import autonomo.model.QuarterSummariesResponse
 import autonomo.model.RentaSummaryResponse
 import autonomo.model.RecordItem
@@ -25,6 +27,7 @@ import java.time.YearMonth
 interface SummariesServicePort {
     fun monthSummaries(workspaceId: String, settings: Settings): MonthSummariesResponse
     fun quarterSummaries(workspaceId: String, settings: Settings): QuarterSummariesResponse
+    fun ivaSummary(workspaceId: String, settings: Settings): IvaSummaryResponse
     fun rentaSummary(workspaceId: String, settings: Settings): RentaSummaryResponse
 }
 
@@ -47,6 +50,15 @@ class SummariesService(
         registerParsed(domainService, parsed)
         val summaries: List<QuarterSummary> = domainService.quarterSummaries(settings)
         return QuarterSummariesResponse(settings = settings, items = summaries)
+    }
+
+    override fun ivaSummary(workspaceId: String, settings: Settings): IvaSummaryResponse {
+        val records = loadYearRecordsByQuarter(workspaceId, settings.year)
+        val parsed = parseRecords(records)
+        val domainService = DefaultDomainService()
+        registerParsed(domainService, parsed)
+        val estimate: IvaYearEstimate = domainService.ivaYearEstimate(settings)
+        return IvaSummaryResponse(settings = settings, iva = estimate)
     }
 
     override fun rentaSummary(workspaceId: String, settings: Settings): RentaSummaryResponse {

@@ -109,6 +109,124 @@ class SummariesServiceTest {
     }
 
     @Test
+    fun quarterSummariesExposeCumulativeModelo130Due() {
+        val settings = Settings(
+            year = 2024,
+            startDate = LocalDate.parse("2024-01-01"),
+            ivaStd = IvaRate.STANDARD.toRate(),
+            irpfRate = Rate.fromDecimal("0.20"),
+            obligacion130 = true,
+            openingBalance = Money.ZERO
+        )
+
+        val invoicePayload = mapOf(
+            "invoiceDate" to "2024-04-10",
+            "number" to "INV-1",
+            "client" to "Acme",
+            "baseExclVat" to 1000.00,
+            "ivaRate" to "STANDARD",
+            "retencion" to "ZERO",
+            "paymentDate" to "2024-04-20"
+        )
+        val modelo130PaymentPayload = mapOf(
+            "paymentDate" to "2024-03-15",
+            "type" to "Modelo130",
+            "amount" to 50.00
+        )
+        val invoiceItem = sampleItem(
+            workspaceId = "ws-1",
+            recordType = RecordType.INVOICE,
+            eventDate = LocalDate.parse("2024-04-20"),
+            payloadJson = JsonSupport.mapper.writeValueAsString(invoicePayload),
+            workspaceMonth = "WS#ws-1#M#2024-04",
+            workspaceQuarter = "WS#ws-1#Q#2024-Q2"
+        )
+        val paymentItem = sampleItem(
+            workspaceId = "ws-1",
+            recordType = RecordType.STATE_PAYMENT,
+            eventDate = LocalDate.parse("2024-03-15"),
+            payloadJson = JsonSupport.mapper.writeValueAsString(modelo130PaymentPayload),
+            workspaceMonth = "WS#ws-1#M#2024-03",
+            workspaceQuarter = "WS#ws-1#Q#2024-Q1"
+        )
+
+        val repo = FakeRecordsRepository(
+            itemsByQuarter = mapOf(
+                "WS#ws-1#Q#2024-Q1" to listOf(paymentItem),
+                "WS#ws-1#Q#2024-Q2" to listOf(invoiceItem)
+            )
+        )
+        val service = SummariesService(repo)
+
+        val response = service.quarterSummaries("ws-1", settings)
+
+        val q2 = response.items.firstOrNull { it.quarterKey.year == 2024 && it.quarterKey.quarter == 2 }
+        assertNotNull(q2)
+        assertEquals(0, q2!!.modelo130DueThisQuarter.amount.compareTo(BigDecimal("150.0000")))
+    }
+
+    @Test
+    fun ivaSummaryComputesYearEstimateFromQuarterRecords() {
+        val settings = Settings(
+            year = 2024,
+            startDate = LocalDate.parse("2024-01-01"),
+            ivaStd = IvaRate.STANDARD.toRate(),
+            irpfRate = Rate.fromDecimal("0.20"),
+            obligacion130 = false,
+            openingBalance = Money.ZERO
+        )
+
+        val invoicePayload = mapOf(
+            "invoiceDate" to "2024-06-10",
+            "number" to "INV-1",
+            "client" to "Acme",
+            "baseExclVat" to 100.00,
+            "ivaRate" to "STANDARD",
+            "retencion" to "ZERO",
+            "paymentDate" to "2024-06-20"
+        )
+        val expensePayload = mapOf(
+            "documentDate" to "2024-06-05",
+            "vendor" to "Vendor",
+            "category" to "Software",
+            "baseExclVat" to 50.00,
+            "ivaRate" to "STANDARD",
+            "vatRecoverableFlag" to true,
+            "deductibleShare" to 1.00,
+            "paymentDate" to "2024-06-06"
+        )
+        val invoiceItem = sampleItem(
+            workspaceId = "ws-1",
+            recordType = RecordType.INVOICE,
+            eventDate = LocalDate.parse("2024-06-20"),
+            payloadJson = JsonSupport.mapper.writeValueAsString(invoicePayload),
+            workspaceMonth = "WS#ws-1#M#2024-06",
+            workspaceQuarter = "WS#ws-1#Q#2024-Q2"
+        )
+        val expenseItem = sampleItem(
+            workspaceId = "ws-1",
+            recordType = RecordType.EXPENSE,
+            eventDate = LocalDate.parse("2024-06-06"),
+            payloadJson = JsonSupport.mapper.writeValueAsString(expensePayload),
+            workspaceMonth = "WS#ws-1#M#2024-06",
+            workspaceQuarter = "WS#ws-1#Q#2024-Q2"
+        )
+
+        val repo = FakeRecordsRepository(
+            itemsByQuarter = mapOf("WS#ws-1#Q#2024-Q2" to listOf(invoiceItem, expenseItem))
+        )
+        val service = SummariesService(repo)
+
+        val response = service.ivaSummary("ws-1", settings)
+
+        val q2 = response.iva.quarters.firstOrNull { it.quarterKey.year == 2024 && it.quarterKey.quarter == 2 }
+        assertNotNull(q2)
+        assertEquals(0, q2!!.outputVat.amount.compareTo(BigDecimal("21")))
+        assertEquals(0, q2.inputVatDeductible.amount.compareTo(BigDecimal("10.5")))
+        assertEquals(0, q2.vatPayable.amount.compareTo(BigDecimal("10.5000")))
+    }
+
+    @Test
     fun monthSummariesIgnoreBudgetRecords() {
         val settings = Settings(
             year = 2024,

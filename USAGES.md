@@ -230,6 +230,22 @@ Success response (200):
 }
 ```
 
+Quarter summaries include `modelo130DueThisQuarter`, the cumulative filing-oriented Modelo 130 estimate for the quarter. The existing `irpfReserve` remains the period cash-planning reserve.
+
+### IVA year estimate
+
+- `POST /workspaces/{workspaceId}/summaries/iva`
+
+Body: `autonomo.domain.Settings` (see schema in `README.md`).
+
+Success response (200):
+```json
+{
+  "settings": { /* echoed settings */ },
+  "iva": { /* IvaYearEstimate */ }
+}
+```
+
 ## Payload formats
 
 All Money values are JSON numbers. All rate/percentage values are JSON numbers in `[0,1]`.
@@ -244,6 +260,7 @@ All Money values are JSON numbers. All rate/percentage values are JSON numbers i
   "baseExclVat": 1000.00,
   "ivaRate": "STANDARD",
   "retencion": "STANDARD",
+  "vatTreatment": "SPANISH_IVA",
   "paymentDate": "2024-06-20",
   "amountReceivedOverride": 1100.00
 }
@@ -260,10 +277,14 @@ All Money values are JSON numbers. All rate/percentage values are JSON numbers i
   "ivaRate": "REDUCED",
   "vatRecoverableFlag": true,
   "deductibleShare": 0.5,
+  "ivaDeductiblePercentage": 1.0,
+  "irpfDeductiblePercentage": 0.5,
   "paymentDate": "2024-06-08",
   "amountPaidOverride": 210.00
 }
 ```
+
+Legacy expense payloads can omit `ivaDeductiblePercentage` and `irpfDeductiblePercentage`; in that case `vatRecoverableFlag` maps to full/no IVA deductibility and `deductibleShare` maps to IRPF deductibility. If both legacy and new fields are present, the explicit new percentages are used by core.
 
 ### StatePayment
 
@@ -388,6 +409,7 @@ Required routes (CDK deploys these explicitly; add more when you add new endpoin
 - `GET /workspaces/{workspaceId}/records`
 - `POST /workspaces/{workspaceId}/summaries/months`
 - `POST /workspaces/{workspaceId}/summaries/quarters`
+- `POST /workspaces/{workspaceId}/summaries/iva`
 - `GET /workspaces/{workspaceId}/records/{recordType}/{eventDate}/{recordId}`
 - `PUT /workspaces/{workspaceId}/records/{recordType}/{eventDate}/{recordId}`
 - `DELETE /workspaces/{workspaceId}/records/{recordType}/{eventDate}/{recordId}`
