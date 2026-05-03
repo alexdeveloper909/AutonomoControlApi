@@ -63,7 +63,7 @@ class SummariesService(
 
     override fun rentaSummary(workspaceId: String, settings: Settings): RentaSummaryResponse {
         val taxYear = settings.rentaPlanning?.taxYear ?: settings.year
-        val records = loadYearRecordsByMonth(workspaceId, taxYear)
+        val records = loadRentaTaxYearRecords(workspaceId, taxYear)
         val parsed = parseRecords(records)
         val renta: RentaEstimate? = RentaPlanner.estimate(
             settings = settings,
@@ -94,6 +94,16 @@ class SummariesService(
             val workspaceQuarter = "WS#$workspaceId#Q#$year-Q$quarter"
             repository.queryByQuarter(workspaceQuarter, recordType = null)
         }
+
+    private fun loadRentaTaxYearRecords(workspaceId: String, taxYear: Int): List<RecordItem> {
+        val taxYearRecords = loadYearRecordsByMonth(workspaceId, taxYear)
+        val januaryAfterTaxYear = YearMonth.of(taxYear + 1, 1)
+        val januaryStatePayments = repository.queryByMonth(
+            "WS#$workspaceId#M#$januaryAfterTaxYear",
+            recordType = RecordType.STATE_PAYMENT
+        )
+        return taxYearRecords + januaryStatePayments
+    }
 
     private data class ParsedRecords(
         val invoices: List<Invoice>,

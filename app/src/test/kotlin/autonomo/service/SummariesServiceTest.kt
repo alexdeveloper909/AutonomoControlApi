@@ -129,7 +129,7 @@ class SummariesServiceTest {
             "paymentDate" to "2024-04-20"
         )
         val modelo130PaymentPayload = mapOf(
-            "paymentDate" to "2024-03-15",
+            "paymentDate" to "2024-04-20",
             "type" to "Modelo130",
             "amount" to 50.00
         )
@@ -144,16 +144,15 @@ class SummariesServiceTest {
         val paymentItem = sampleItem(
             workspaceId = "ws-1",
             recordType = RecordType.STATE_PAYMENT,
-            eventDate = LocalDate.parse("2024-03-15"),
+            eventDate = LocalDate.parse("2024-04-20"),
             payloadJson = JsonSupport.mapper.writeValueAsString(modelo130PaymentPayload),
-            workspaceMonth = "WS#ws-1#M#2024-03",
-            workspaceQuarter = "WS#ws-1#Q#2024-Q1"
+            workspaceMonth = "WS#ws-1#M#2024-04",
+            workspaceQuarter = "WS#ws-1#Q#2024-Q2"
         )
 
         val repo = FakeRecordsRepository(
             itemsByQuarter = mapOf(
-                "WS#ws-1#Q#2024-Q1" to listOf(paymentItem),
-                "WS#ws-1#Q#2024-Q2" to listOf(invoiceItem)
+                "WS#ws-1#Q#2024-Q2" to listOf(invoiceItem, paymentItem)
             )
         )
         val service = SummariesService(repo)

@@ -166,6 +166,12 @@ Responses include `items` with `monthKey` (`YYYY-MM`) or `quarterKey` (`{ "year"
 - Expense: `paymentDate ?: documentDate`
 - StatePayment: `paymentDate`
 - Transfer: `date`
+
+Modelo 130 tax calculations use filing quarter rather than cash quarter. The
+state payment payload can include optional `taxPeriodQuarter` (`year`, `quarter`);
+when omitted, normal delayed filing months are inferred (April -> Q1, July -> Q2,
+October -> Q3, January -> previous year's Q4). `paymentDate` still controls
+storage keys, cash flow, and record listing.
 - BudgetEntry: `monthKey.firstDay()`
 - RegularSpending: `startDate`
 

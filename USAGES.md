@@ -296,6 +296,11 @@ Legacy expense payloads can omit `ivaDeductiblePercentage` and `irpfDeductiblePe
 }
 ```
 
+For Modelo 130 payments, `paymentDate` remains the cash/event date. Tax math
+uses the filing quarter: send optional `taxPeriodQuarter` (`{"year":2024,"quarter":2}`)
+for unusual dates, or omit it and the core will infer normal delayed filing
+months (April -> Q1, July -> Q2, October -> Q3, January -> previous year's Q4).
+
 ### Transfer
 
 ```json
