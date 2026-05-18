@@ -249,6 +249,93 @@ class RecordsServiceTest {
         assertEquals("Budget month cannot be changed", error.message)
     }
 
+    @Test
+    fun createFixedTermRegularSpendingStoresNormalizedPayload() {
+        val repo = FakeRecordsRepository()
+        val service = RecordsService(repo)
+        val payload = JsonSupport.mapper.readTree(
+            """
+            {
+              "name": "Credit card installment",
+              "startDate": "2026-06-15",
+              "scheduleType": "FIXED_TERM",
+              "paymentCount": 6,
+              "amount": 120.00
+            }
+            """.trimIndent()
+        )
+
+        val response = service.createRecord(
+            workspaceId = "ws-1",
+            userId = "user-1",
+            request = RecordRequest(recordType = RecordType.REGULAR_SPENDING, payload = payload)
+        )
+
+        val storedPayload = JsonSupport.mapper.readTree(repo.created.single().payloadJson)
+        assertEquals(LocalDate.parse("2026-06-15"), response.eventDate)
+        assertEquals("FIXED_TERM", storedPayload.get("scheduleType").asText())
+        assertEquals(6, storedPayload.get("paymentCount").asInt())
+        assertEquals(false, storedPayload.has("cadence"))
+    }
+
+    @Test
+    fun updateFixedTermRegularSpendingStoresNormalizedPayload() {
+        val existing = sampleItem(RecordType.REGULAR_SPENDING, LocalDate.parse("2026-06-15"), "rec-1")
+        val repo = FakeRecordsRepository(itemsByGetKey = mapOf(existing.recordKey to existing))
+        val service = RecordsService(repo)
+        val payload = JsonSupport.mapper.readTree(
+            """
+            {
+              "name": "Updated installment",
+              "startDate": "2026-06-15",
+              "scheduleType": "FIXED_TERM",
+              "paymentCount": 10,
+              "amount": 99.00
+            }
+            """.trimIndent()
+        )
+
+        val response = service.updateRecord(
+            workspaceId = "ws-1",
+            userId = "user-1",
+            recordType = RecordType.REGULAR_SPENDING,
+            eventDate = LocalDate.parse("2026-06-15"),
+            recordId = "rec-1",
+            request = RecordRequest(recordType = RecordType.REGULAR_SPENDING, payload = payload)
+        )
+
+        val storedPayload = JsonSupport.mapper.readTree(repo.updated.single().payloadJson)
+        assertEquals(LocalDate.parse("2026-06-15"), response!!.eventDate)
+        assertEquals("FIXED_TERM", storedPayload.get("scheduleType").asText())
+        assertEquals(10, storedPayload.get("paymentCount").asInt())
+        assertEquals(false, storedPayload.has("cadence"))
+    }
+
+    @Test
+    fun createInvalidFixedTermRegularSpendingFails() {
+        val service = RecordsService(FakeRecordsRepository())
+        val payload = JsonSupport.mapper.readTree(
+            """
+            {
+              "name": "Credit card installment",
+              "startDate": "2026-06-15",
+              "scheduleType": "FIXED_TERM",
+              "cadence": "YEARLY",
+              "paymentCount": 6,
+              "amount": 120.00
+            }
+            """.trimIndent()
+        )
+
+        assertThrows<IllegalArgumentException> {
+            service.createRecord(
+                workspaceId = "ws-1",
+                userId = "user-1",
+                request = RecordRequest(recordType = RecordType.REGULAR_SPENDING, payload = payload)
+            )
+        }
+    }
+
     private class FakeRecordsRepository(
         private val itemsByMonth: Map<String, List<RecordItem>> = emptyMap(),
         private val itemsByQuarter: Map<String, List<RecordItem>> = emptyMap(),
@@ -257,12 +344,15 @@ class RecordsServiceTest {
     ) : WorkspaceRecordsRepositoryPort {
         val queriedPrefixes = mutableListOf<String>()
         val created = mutableListOf<RecordItem>()
+        val updated = mutableListOf<RecordItem>()
 
         override fun create(record: RecordItem) {
             created += record
         }
 
-        override fun update(record: RecordItem) = Unit
+        override fun update(record: RecordItem) {
+            updated += record
+        }
 
         override fun get(workspaceId: String, recordKey: String): RecordItem? = itemsByGetKey[recordKey]
         override fun delete(workspaceId: String, recordKey: String) = throw UnsupportedOperationException()
@@ -292,7 +382,7 @@ class RecordsServiceTest {
             recordId = recordId,
             recordType = recordType,
             eventDate = eventDate,
-            payloadJson = "{}",
+            payloadJson = defaultPayload(recordType, eventDate),
             workspaceMonth = "WS#ws-1#M#2024-06",
             workspaceQuarter = "WS#ws-1#Q#2024-Q2",
             createdAt = now,
@@ -301,4 +391,18 @@ class RecordsServiceTest {
             updatedBy = "user-1"
         )
     }
+
+    private fun defaultPayload(recordType: RecordType, eventDate: LocalDate): String =
+        when (recordType) {
+            RecordType.REGULAR_SPENDING ->
+                """
+                {
+                  "name": "Spending",
+                  "startDate": "$eventDate",
+                  "cadence": "MONTHLY",
+                  "amount": 10.00
+                }
+                """.trimIndent()
+            else -> "{}"
+        }
 }

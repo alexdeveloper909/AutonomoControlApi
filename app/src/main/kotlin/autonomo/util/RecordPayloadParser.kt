@@ -7,6 +7,8 @@ import autonomo.domain.Invoice
 import autonomo.domain.Money
 import autonomo.domain.MonthKey
 import autonomo.domain.RegularSpending
+import autonomo.domain.RegularSpendingCadence
+import autonomo.domain.RegularSpendingScheduleType
 import autonomo.domain.StatePayment
 import autonomo.domain.Transfer
 import autonomo.model.RecordType
@@ -23,7 +25,7 @@ object RecordPayloadParser {
             RecordType.STATE_PAYMENT -> JsonSupport.mapper.treeToValue(payload, StatePayment::class.java)
             RecordType.TRANSFER -> JsonSupport.mapper.treeToValue(payload, Transfer::class.java)
             RecordType.BUDGET -> parseBudgetEntry(payload)
-            RecordType.REGULAR_SPENDING -> JsonSupport.mapper.treeToValue(payload, RegularSpending::class.java)
+            RecordType.REGULAR_SPENDING -> parseRegularSpending(payload)
         }
     }
 
@@ -47,6 +49,7 @@ object RecordPayloadParser {
     fun toJson(payload: Any): String =
         when (payload) {
             is BudgetEntry -> JsonSupport.mapper.writeValueAsString(payload.toNormalizedJson())
+            is RegularSpending -> JsonSupport.mapper.writeValueAsString(payload.toNormalizedJson())
             else -> JsonSupport.mapper.writeValueAsString(payload)
         }
 
@@ -72,6 +75,54 @@ object RecordPayloadParser {
         )
     }
 
+    private fun parseRegularSpending(payload: JsonNode): RegularSpending {
+        val name = payload.requiredField("name").asText().trim()
+        val startDate = payload.requiredField("startDate").asLocalDate("startDate")
+        val amount = payload.requiredField("amount").asMoney("amount")
+        val scheduleType = payload.get("scheduleType")
+            ?.takeUnless { it.isNull }
+            ?.asEnum<RegularSpendingScheduleType>("scheduleType")
+            ?: RegularSpendingScheduleType.ONGOING
+
+        val cadence = payload.get("cadence")
+            ?.takeUnless { it.isNull }
+            ?.asEnum<RegularSpendingCadence>("cadence")
+
+        val paymentCount = payload.get("paymentCount")
+            ?.takeUnless { it.isNull }
+            ?.asPositiveInt("paymentCount")
+
+        return when (scheduleType) {
+            RegularSpendingScheduleType.ONGOING -> {
+                if (paymentCount != null) {
+                    throw IllegalArgumentException("paymentCount is not allowed for ongoing regular spendings")
+                }
+                RegularSpending(
+                    name = name,
+                    startDate = startDate,
+                    cadence = cadence ?: throw IllegalArgumentException("cadence is required for ongoing regular spendings"),
+                    amount = amount,
+                    scheduleType = scheduleType,
+                    paymentCount = null
+                )
+            }
+            RegularSpendingScheduleType.FIXED_TERM -> {
+                if (cadence != null && cadence != RegularSpendingCadence.MONTHLY) {
+                    throw IllegalArgumentException("cadence must be omitted or MONTHLY for fixed-term regular spendings")
+                }
+                RegularSpending(
+                    name = name,
+                    startDate = startDate,
+                    cadence = cadence,
+                    amount = amount,
+                    scheduleType = scheduleType,
+                    paymentCount = paymentCount
+                        ?: throw IllegalArgumentException("paymentCount is required for fixed-term regular spendings")
+                )
+            }
+        }
+    }
+
     private fun JsonNode.requiredField(name: String): JsonNode =
         get(name) ?: throw IllegalArgumentException("$name is required")
 
@@ -82,6 +133,29 @@ object RecordPayloadParser {
         val text = asText()
         return runCatching { MonthKey(YearMonth.parse(text)) }
             .getOrElse { throw IllegalArgumentException("$fieldName must be YYYY-MM") }
+    }
+
+    private fun JsonNode.asLocalDate(fieldName: String): LocalDate {
+        val text = asText()
+        return runCatching { LocalDate.parse(text) }
+            .getOrElse { throw IllegalArgumentException("$fieldName must be YYYY-MM-DD") }
+    }
+
+    private inline fun <reified T : Enum<T>> JsonNode.asEnum(fieldName: String): T {
+        val text = asText()
+        return runCatching { enumValueOf<T>(text) }
+            .getOrElse { throw IllegalArgumentException("$fieldName is invalid") }
+    }
+
+    private fun JsonNode.asPositiveInt(fieldName: String): Int {
+        if (!isIntegralNumber || !canConvertToInt()) {
+            throw IllegalArgumentException("$fieldName must be an integer >= 1")
+        }
+        val value = intValue()
+        if (value < 1) {
+            throw IllegalArgumentException("$fieldName must be an integer >= 1")
+        }
+        return value
     }
 
     private fun JsonNode.asMoney(fieldName: String): Money {
@@ -104,6 +178,23 @@ object RecordPayloadParser {
         notes?.let { obj.put("notes", it) }
         exceptionalSpend?.let { obj.put("exceptionalSpend", it.amount) }
         exceptionalNotes?.let { obj.put("exceptionalNotes", it) }
+        return obj
+    }
+
+    private fun RegularSpending.toNormalizedJson(): JsonNode {
+        val obj = JsonSupport.mapper.createObjectNode()
+        obj.put("name", name)
+        obj.put("startDate", startDate.toString())
+        obj.put("scheduleType", scheduleType.name)
+        when (scheduleType) {
+            RegularSpendingScheduleType.ONGOING -> {
+                obj.put("cadence", cadence!!.name)
+            }
+            RegularSpendingScheduleType.FIXED_TERM -> {
+                obj.put("paymentCount", paymentCount!!)
+            }
+        }
+        obj.put("amount", amount.amount)
         return obj
     }
 }

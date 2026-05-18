@@ -9,6 +9,9 @@ import autonomo.domain.Money
 import autonomo.domain.MonthKey
 import autonomo.domain.Percentage
 import autonomo.domain.Rate
+import autonomo.domain.RegularSpending
+import autonomo.domain.RegularSpendingCadence
+import autonomo.domain.RegularSpendingScheduleType
 import autonomo.domain.RetencionRate
 import autonomo.domain.StatePayment
 import autonomo.domain.StatePaymentType
@@ -285,6 +288,107 @@ class RecordPayloadParserTest {
         assertThrows(Exception::class.java) {
             RecordPayloadParser.parse(RecordType.EXPENSE, payload)
         }
+    }
+
+    @Test
+    fun parsesLegacyRegularSpendingAsOngoing() {
+        val payload = JsonSupport.mapper.readTree(
+            """
+            {
+              "name": "Gym",
+              "startDate": "2026-06-01",
+              "cadence": "MONTHLY",
+              "amount": 29.99
+            }
+            """.trimIndent()
+        )
+
+        val spending = RecordPayloadParser.parse(RecordType.REGULAR_SPENDING, payload) as RegularSpending
+
+        assertEquals(RegularSpendingScheduleType.ONGOING, spending.scheduleType)
+        assertEquals(RegularSpendingCadence.MONTHLY, spending.cadence)
+        assertEquals(null, spending.paymentCount)
+        assertEquals(LocalDate.parse("2026-06-01"), RecordPayloadParser.eventDate(RecordType.REGULAR_SPENDING, spending))
+    }
+
+    @Test
+    fun parsesFixedTermRegularSpending() {
+        val payload = JsonSupport.mapper.readTree(
+            """
+            {
+              "name": "Installment",
+              "startDate": "2026-06-15",
+              "scheduleType": "FIXED_TERM",
+              "paymentCount": 6,
+              "amount": 120.00
+            }
+            """.trimIndent()
+        )
+
+        val spending = RecordPayloadParser.parse(RecordType.REGULAR_SPENDING, payload) as RegularSpending
+
+        assertEquals(RegularSpendingScheduleType.FIXED_TERM, spending.scheduleType)
+        assertEquals(null, spending.cadence)
+        assertEquals(6, spending.paymentCount)
+        assertMoneyEquals("120.00", spending.amount)
+    }
+
+    @Test
+    fun rejectsInvalidFixedTermRegularSpending() {
+        val payload = JsonSupport.mapper.readTree(
+            """
+            {
+              "name": "Installment",
+              "startDate": "2026-06-15",
+              "scheduleType": "FIXED_TERM",
+              "cadence": "YEARLY",
+              "paymentCount": 6,
+              "amount": 120.00
+            }
+            """.trimIndent()
+        )
+
+        assertThrows(IllegalArgumentException::class.java) {
+            RecordPayloadParser.parse(RecordType.REGULAR_SPENDING, payload)
+        }
+    }
+
+    @Test
+    fun rejectsPaymentCountForOngoingRegularSpending() {
+        val payload = JsonSupport.mapper.readTree(
+            """
+            {
+              "name": "Gym",
+              "startDate": "2026-06-01",
+              "scheduleType": "ONGOING",
+              "cadence": "MONTHLY",
+              "paymentCount": 6,
+              "amount": 29.99
+            }
+            """.trimIndent()
+        )
+
+        assertThrows(IllegalArgumentException::class.java) {
+            RecordPayloadParser.parse(RecordType.REGULAR_SPENDING, payload)
+        }
+    }
+
+    @Test
+    fun serializesFixedTermRegularSpendingWithoutCadence() {
+        val spending = RegularSpending(
+            name = "Installment",
+            startDate = LocalDate.parse("2026-06-15"),
+            cadence = null,
+            amount = Money(BigDecimal("120.00")),
+            scheduleType = RegularSpendingScheduleType.FIXED_TERM,
+            paymentCount = 6
+        )
+
+        val json = JsonSupport.mapper.readTree(RecordPayloadParser.toJson(spending))
+
+        assertEquals("FIXED_TERM", json.get("scheduleType").asText())
+        assertEquals(6, json.get("paymentCount").asInt())
+        assertFalse(json.has("cadence"))
     }
 
     private fun assertMoneyEquals(expected: String, actual: Money) {

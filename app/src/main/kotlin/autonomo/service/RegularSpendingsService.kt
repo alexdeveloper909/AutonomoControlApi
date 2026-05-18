@@ -53,13 +53,14 @@ class RegularSpendingsService(
     }
 
     private fun toResponse(item: RecordItem): RecordResponse {
+        val spending = parseSpending(item)
         return RecordResponse(
             workspaceId = item.workspaceId,
             recordKey = item.recordKey,
             recordId = item.recordId,
             recordType = item.recordType,
             eventDate = item.eventDate,
-            payload = JsonSupport.mapper.readTree(item.payloadJson),
+            payload = JsonSupport.mapper.readTree(RecordPayloadParser.toJson(spending)),
             createdAt = item.createdAt,
             updatedAt = item.updatedAt,
             createdBy = item.createdBy,
@@ -67,4 +68,3 @@ class RegularSpendingsService(
         )
     }
 }
-
