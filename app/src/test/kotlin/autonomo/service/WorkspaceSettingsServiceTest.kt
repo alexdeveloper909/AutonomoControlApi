@@ -92,6 +92,98 @@ class WorkspaceSettingsServiceTest {
     }
 
     @Test
+    fun putSettingsAllowsArchivingAndClosingNonMainAccount() {
+        val existingCash = cashAccount(name = "Cash")
+        val archivedAt = LocalDate.parse("2026-06-01")
+        val closedAt = LocalDate.parse("2026-06-02")
+        val repo = FakeSettingsRepository(
+            settings(
+                balanceAccounts = listOf(
+                    BalanceAccount.main(Money.ZERO, LocalDate.parse("2026-01-01")),
+                    existingCash
+                )
+            )
+        )
+        val service = WorkspaceSettingsService(repo)
+
+        service.putSettings(
+            workspaceId = "ws-1",
+            settings = settings(
+                balanceAccounts = listOf(
+                    BalanceAccount.main(Money.ZERO, LocalDate.parse("2026-01-01")),
+                    existingCash.copy(archivedAt = archivedAt, closedAt = closedAt)
+                )
+            ),
+            updatedBy = "user-1",
+            preserveExistingBalanceAccounts = false
+        )
+
+        val savedCash = repo.savedSettings!!.balanceAccounts!!.first { it.accountId == "cash" }
+        assertEquals(archivedAt, savedCash.archivedAt)
+        assertEquals(closedAt, savedCash.closedAt)
+    }
+
+    @Test
+    fun putSettingsRejectsClearingArchivedAccount() {
+        val archivedCash = cashAccount(name = "Cash").copy(archivedAt = LocalDate.parse("2026-06-01"))
+        val repo = FakeSettingsRepository(
+            settings(
+                balanceAccounts = listOf(
+                    BalanceAccount.main(Money.ZERO, LocalDate.parse("2026-01-01")),
+                    archivedCash
+                )
+            )
+        )
+        val service = WorkspaceSettingsService(repo)
+
+        val error = assertThrows<IllegalArgumentException> {
+            service.putSettings(
+                workspaceId = "ws-1",
+                settings = settings(
+                    balanceAccounts = listOf(
+                        BalanceAccount.main(Money.ZERO, LocalDate.parse("2026-01-01")),
+                        archivedCash.copy(archivedAt = null)
+                    )
+                ),
+                updatedBy = "user-1",
+                preserveExistingBalanceAccounts = false
+            )
+        }
+
+        assertEquals("BalanceAccount.archivedAt cannot be cleared or changed", error.message)
+    }
+
+    @Test
+    fun putSettingsRejectsArchivingMainAccount() {
+        val main = BalanceAccount.main(Money.ZERO, LocalDate.parse("2026-01-01"))
+        val repo = FakeSettingsRepository(
+            settings(
+                balanceAccounts = listOf(
+                    main,
+                    cashAccount(name = "Cash")
+                )
+            )
+        )
+        val service = WorkspaceSettingsService(repo)
+
+        val error = assertThrows<IllegalArgumentException> {
+            service.putSettings(
+                workspaceId = "ws-1",
+                settings = settings(
+                    balanceAccounts = listOf(
+                        main.copy(archivedAt = LocalDate.parse("2026-06-01")),
+                        cashAccount(name = "Cash")
+                    )
+                ),
+                updatedBy = "user-1",
+                preserveExistingBalanceAccounts = false
+            )
+        }
+
+        assertEquals("Main balance account cannot be archived or closed", error.message)
+    }
+
+    @Test
     fun putSettingsRejectsInvalidBalanceAccounts() {
         val repo = FakeSettingsRepository(null)
         val service = WorkspaceSettingsService(repo)

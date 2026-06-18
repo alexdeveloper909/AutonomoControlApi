@@ -1,6 +1,7 @@
 package autonomo.service
 
 import autonomo.domain.Settings
+import autonomo.domain.BalanceAccount
 import autonomo.domain.DomainValidation
 import autonomo.domain.validateBalanceAccountRename
 import autonomo.repository.WorkspaceSettingsRepository
@@ -46,11 +47,17 @@ class WorkspaceSettingsService(
         incomingAccounts.forEach { account ->
             val before = existingAccounts[account.accountId] ?: return@forEach
             validateBalanceAccountRename(before, account)
-            require(before.archivedAt == account.archivedAt) {
-                "BalanceAccount.archivedAt cannot change during rename"
+            require(before.accountId != BalanceAccount.MAIN_ACCOUNT_ID || (account.archivedAt == null && account.closedAt == null)) {
+                "Main balance account cannot be archived or closed"
             }
-            require(before.closedAt == account.closedAt) {
-                "BalanceAccount.closedAt cannot change during rename"
+            require(before.archivedAt == null || before.archivedAt == account.archivedAt) {
+                "BalanceAccount.archivedAt cannot be cleared or changed"
+            }
+            require(before.closedAt == null || before.closedAt == account.closedAt) {
+                "BalanceAccount.closedAt cannot be cleared or changed"
+            }
+            require(before.closedAt == null || account.archivedAt != null) {
+                "Closed balance account must remain archived"
             }
         }
 
