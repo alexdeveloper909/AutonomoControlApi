@@ -1,6 +1,7 @@
 package autonomo.handler
 
 import autonomo.controller.RecordsController
+import autonomo.controller.BalanceController
 import autonomo.controller.RegularSpendingsController
 import autonomo.controller.SummariesController
 import autonomo.controller.UsersController
@@ -18,6 +19,7 @@ import com.amazonaws.services.lambda.runtime.events.APIGatewayV2HTTPResponse
 
 class RecordsLambda : RequestHandler<APIGatewayV2HTTPEvent, APIGatewayV2HTTPResponse> {
     private val controller = RecordsController()
+    private val balanceController = BalanceController()
     private val summariesController = SummariesController()
     private val regularSpendingsController = RegularSpendingsController()
     private val workspacesController = WorkspacesController()
@@ -99,6 +101,14 @@ class RecordsLambda : RequestHandler<APIGatewayV2HTTPEvent, APIGatewayV2HTTPResp
             return when (method) {
                 "GET" -> workspaceSettingsController.getSettings(workspaceId, user)
                 "PUT" -> workspaceSettingsController.putSettings(workspaceId, event.body, user)
+                else -> HttpResponses.notFound("Route not found")
+            }
+        }
+
+        if (segments.size == 3 && segments[0] == "workspaces" && segments[2] == "balance") {
+            val workspaceId = segments.getOrNull(1)
+            return when (method) {
+                "GET" -> balanceController.getBalance(workspaceId, event.queryStringParameters ?: emptyMap(), user)
                 else -> HttpResponses.notFound("Route not found")
             }
         }

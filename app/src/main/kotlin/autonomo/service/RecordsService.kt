@@ -1,6 +1,10 @@
 package autonomo.service
 
 import autonomo.config.JsonSupport
+import autonomo.domain.BalanceMovement
+import autonomo.domain.DomainValidation
+import autonomo.domain.validateBalanceMovementEdit
+import autonomo.domain.normalizedBalanceAccounts
 import autonomo.model.RecordItem
 import autonomo.model.RecordKey
 import autonomo.model.RecordRequest
@@ -9,6 +13,8 @@ import autonomo.model.RecordType
 import autonomo.model.RecordsResponse
 import autonomo.repository.WorkspaceRecordsRepository
 import autonomo.repository.WorkspaceRecordsRepositoryPort
+import autonomo.repository.WorkspaceSettingsRepository
+import autonomo.repository.WorkspaceSettingsRepositoryPort
 import autonomo.util.RecordPayloadParser
 import java.time.Instant
 import java.time.LocalDate
@@ -47,7 +53,8 @@ enum class RecordsSort {
 class InvalidNextTokenException(message: String) : RuntimeException(message)
 
 class RecordsService(
-    private val repository: WorkspaceRecordsRepositoryPort = WorkspaceRecordsRepository()
+    private val repository: WorkspaceRecordsRepositoryPort = WorkspaceRecordsRepository(),
+    private val settingsRepository: WorkspaceSettingsRepositoryPort = WorkspaceSettingsRepository()
 ) : RecordsServicePort {
     override fun createRecord(
         workspaceId: String,
@@ -56,6 +63,7 @@ class RecordsService(
     ): RecordResponse {
         val payload = RecordPayloadParser.parse(request.recordType, request.payload)
         val eventDate = RecordPayloadParser.eventDate(request.recordType, payload)
+        validateTransferCreate(workspaceId, request.recordType, payload)
         if (request.recordType == RecordType.BUDGET) {
             ensureBudgetMonthIsUnique(workspaceId, eventDate)
         }
@@ -100,21 +108,38 @@ class RecordsService(
 
         val payload = RecordPayloadParser.parse(recordType, request.payload)
         val derivedEventDate = RecordPayloadParser.eventDate(recordType, payload)
-        require(derivedEventDate == eventDate) {
-            if (recordType == RecordType.BUDGET) {
-                "Budget month cannot be changed"
-            } else {
-                "eventDate must match the existing recordKey"
-            }
+        if (recordType == RecordType.BUDGET) {
+            require(derivedEventDate == eventDate) { "Budget month cannot be changed" }
+        } else if (recordType != RecordType.TRANSFER) {
+            require(derivedEventDate == eventDate) { "eventDate must match the existing recordKey" }
         }
+        validateTransferUpdate(workspaceId, recordType, existing, payload)
 
         val now = Instant.now()
+        val newRecordKey = RecordKey.build(recordType, derivedEventDate, recordId)
         val updated = existing.copy(
+            recordKey = newRecordKey,
+            eventDate = derivedEventDate,
             payloadJson = RecordPayloadParser.toJson(payload),
+            workspaceMonth = workspaceMonthKey(workspaceId, derivedEventDate),
+            workspaceQuarter = workspaceQuarterKey(workspaceId, derivedEventDate),
             updatedAt = now,
             updatedBy = userId
         )
-        repository.update(updated)
+
+        if (newRecordKey == existing.recordKey) {
+            repository.update(updated)
+        } else {
+            try {
+                repository.create(updated)
+            } catch (ex: Exception) {
+                if (repository.isConditionalFailure(ex)) {
+                    throw RecordConflictException("record already exists")
+                }
+                throw ex
+            }
+            repository.delete(workspaceId, existing.recordKey)
+        }
         return toResponse(updated)
     }
 
@@ -232,6 +257,48 @@ class RecordsService(
         val existing = repository.queryByWorkspaceRecordKeyPrefix(workspaceId, "${RecordType.BUDGET.name}#$eventDate#")
         if (existing.isNotEmpty()) {
             throw RecordConflictException("Budget entry already exists for ${eventDate.toString().substring(0, 7)}")
+        }
+    }
+
+    private fun validateTransferCreate(workspaceId: String, recordType: RecordType, payload: Any) {
+        if (recordType != RecordType.TRANSFER) return
+        val movement = payload as BalanceMovement
+        val accounts = loadBalanceAccounts(workspaceId)
+        DomainValidation.validateBalanceMovement(movement, accounts)
+        validateClosedAccountDates(movement, accounts, existingAllowedAccountIds = emptySet())
+    }
+
+    private fun validateTransferUpdate(
+        workspaceId: String,
+        recordType: RecordType,
+        existing: RecordItem,
+        payload: Any
+    ) {
+        if (recordType != RecordType.TRANSFER) return
+        val before = RecordPayloadParser.parseBalanceMovement(JsonSupport.mapper.readTree(existing.payloadJson))
+        val after = payload as BalanceMovement
+        val accounts = loadBalanceAccounts(workspaceId)
+        validateBalanceMovementEdit(before, after, accounts)
+        validateClosedAccountDates(after, accounts, existingAllowedAccountIds = before.accountImpacts().keys)
+    }
+
+    private fun loadBalanceAccounts(workspaceId: String) =
+        (settingsRepository.getSettings(workspaceId) ?: throw IllegalArgumentException("workspace settings not found"))
+            .normalizedBalanceAccounts()
+
+    private fun validateClosedAccountDates(
+        movement: BalanceMovement,
+        accounts: List<autonomo.domain.BalanceAccount>,
+        existingAllowedAccountIds: Set<String>
+    ) {
+        val accountById = accounts.associateBy { it.accountId }
+        movement.accountImpacts().keys.forEach { accountId ->
+            val account = accountById.getValue(accountId)
+            if (account.closedAt != null && accountId !in existingAllowedAccountIds) {
+                require(!movement.date.isAfter(account.closedAt)) {
+                    "Balance movement cannot create a new reference after account closedAt"
+                }
+            }
         }
     }
 

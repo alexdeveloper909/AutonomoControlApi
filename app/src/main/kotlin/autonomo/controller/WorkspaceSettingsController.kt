@@ -26,15 +26,33 @@ class WorkspaceSettingsController(
         if (workspaceId.isNullOrBlank()) return HttpResponses.badRequest("workspaceId is required")
         val caller = user ?: return HttpResponses.unauthorized()
         ensureWriteAccess(workspaceId, caller)?.let { return it }
-        val settings = parseSettings(body) ?: return HttpResponses.badRequest("Invalid settings")
+        val parsed = parseSettings(body) ?: return HttpResponses.badRequest("Invalid settings")
 
-        service.putSettings(workspaceId, settings, caller.userId)
-        return HttpResponses.ok(mapOf("workspaceId" to workspaceId, "settings" to settings))
+        return runCatching {
+            service.putSettings(
+                workspaceId = workspaceId,
+                settings = parsed.settings,
+                updatedBy = caller.userId,
+                preserveExistingBalanceAccounts = !parsed.includesBalanceAccounts
+            )
+            val responseSettings = service.getSettings(workspaceId) ?: parsed.settings
+            HttpResponses.ok(mapOf("workspaceId" to workspaceId, "settings" to responseSettings))
+        }.getOrElse { error ->
+            HttpResponses.badRequest(error.message ?: "Invalid settings")
+        }
     }
 
-    private fun parseSettings(body: String?): Settings? {
+    private data class ParsedSettings(val settings: Settings, val includesBalanceAccounts: Boolean)
+
+    private fun parseSettings(body: String?): ParsedSettings? {
         if (body.isNullOrBlank()) return null
-        return runCatching { autonomo.config.JsonSupport.mapper.readValue(body, Settings::class.java) }.getOrNull()
+        return runCatching {
+            val node = autonomo.config.JsonSupport.mapper.readTree(body)
+            ParsedSettings(
+                settings = autonomo.config.JsonSupport.mapper.treeToValue(node, Settings::class.java),
+                includesBalanceAccounts = node.has("balanceAccounts")
+            )
+        }.getOrNull()
     }
 
     private fun ensureAccess(workspaceId: String, user: UserContext): HttpResponse? {

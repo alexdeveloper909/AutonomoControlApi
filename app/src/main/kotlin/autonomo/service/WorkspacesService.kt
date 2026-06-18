@@ -1,5 +1,6 @@
 package autonomo.service
 
+import autonomo.domain.DomainValidation
 import autonomo.model.UserContext
 import autonomo.model.WorkspaceCreateRequest
 import autonomo.model.WorkspaceCreateResponse
@@ -71,6 +72,7 @@ class WorkspacesService(
     override fun createWorkspace(user: UserContext, request: WorkspaceCreateRequest): WorkspaceCreateResponse {
         val name = request.name.trim()
         require(name.isNotBlank()) { "name is required" }
+        DomainValidation.validateSettings(request.settings)
 
         val workspaceId = UUID.randomUUID().toString()
         try {

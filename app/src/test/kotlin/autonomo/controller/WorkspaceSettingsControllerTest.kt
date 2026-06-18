@@ -1,6 +1,8 @@
 package autonomo.controller
 
 import autonomo.domain.Money
+import autonomo.domain.BalanceAccount
+import autonomo.domain.BalanceAccountKind
 import autonomo.domain.IvaDeductionProfile
 import autonomo.domain.Q4NegativeVatAction
 import autonomo.domain.Rate
@@ -58,8 +60,25 @@ class WorkspaceSettingsControllerTest {
         assertTrue(response.body?.contains("\"REQUEST_REFUND\"") == true)
     }
 
+    @Test
+    fun putSettingsRoundTripsBalanceAccounts() {
+        val controller = WorkspaceSettingsController(
+            service = FakeSettingsService(),
+            access = FakeAccessService(canAccess = true, canWrite = true)
+        )
+
+        val response = controller.putSettings("ws-1", settingsJsonWithBalanceAccounts(2026), UserContext("user-1", "user@example.com"))
+
+        assertEquals(200, response.statusCode)
+        assertTrue(response.body?.contains("\"balanceAccounts\"") == true)
+        assertTrue(response.body?.contains("\"accountId\":\"cash\"") == true)
+        assertTrue(response.body?.contains("\"openingBalance\"") == true)
+    }
+
     private class FakeSettingsService : WorkspaceSettingsServicePort {
-        override fun getSettings(workspaceId: String): Settings? = Settings(
+        private var savedSettings: Settings? = null
+
+        override fun getSettings(workspaceId: String): Settings? = savedSettings ?: Settings(
             year = 2025,
             startDate = LocalDate.of(2025, 1, 1),
             ivaStd = Rate.fromDecimal("0.21"),
@@ -68,7 +87,14 @@ class WorkspaceSettingsControllerTest {
             openingBalance = Money.ZERO
         )
 
-        override fun putSettings(workspaceId: String, settings: Settings, updatedBy: String) = Unit
+        override fun putSettings(
+            workspaceId: String,
+            settings: Settings,
+            updatedBy: String,
+            preserveExistingBalanceAccounts: Boolean
+        ) {
+            savedSettings = settings
+        }
     }
 
     private class FakeAccessService(
@@ -111,6 +137,28 @@ class WorkspaceSettingsControllerTest {
                 defaultIrpfDeductiblePercentage = Rate.fromDecimal("0.80"),
                 q4NegativeVatDefaultAction = Q4NegativeVatAction.REQUEST_REFUND,
                 openingVatCredit = Money(BigDecimal("25.00"))
+            )
+        )
+        return autonomo.config.JsonSupport.mapper.writeValueAsString(settings)
+    }
+
+    private fun settingsJsonWithBalanceAccounts(year: Int): String {
+        val settings = Settings(
+            year = year,
+            startDate = LocalDate.of(year, 1, 1),
+            ivaStd = Rate.fromDecimal("0.21"),
+            irpfRate = Rate.fromDecimal("0.20"),
+            obligacion130 = true,
+            openingBalance = Money(BigDecimal("200.00")),
+            balanceAccounts = listOf(
+                BalanceAccount.main(Money(BigDecimal("200.00")), LocalDate.of(year, 1, 1)),
+                BalanceAccount(
+                    accountId = "cash",
+                    kind = BalanceAccountKind.CASH,
+                    name = "Cash",
+                    openingBalance = Money.ZERO,
+                    openingDate = LocalDate.of(year, 1, 1)
+                )
             )
         )
         return autonomo.config.JsonSupport.mapper.writeValueAsString(settings)

@@ -1,12 +1,19 @@
 package autonomo.service
 
 import autonomo.domain.Settings
+import autonomo.domain.DomainValidation
+import autonomo.domain.validateBalanceAccountRename
 import autonomo.repository.WorkspaceSettingsRepository
 import autonomo.repository.WorkspaceSettingsRepositoryPort
 
 interface WorkspaceSettingsServicePort {
     fun getSettings(workspaceId: String): Settings?
-    fun putSettings(workspaceId: String, settings: Settings, updatedBy: String)
+    fun putSettings(
+        workspaceId: String,
+        settings: Settings,
+        updatedBy: String,
+        preserveExistingBalanceAccounts: Boolean = false
+    )
 }
 
 class WorkspaceSettingsService(
@@ -14,8 +21,43 @@ class WorkspaceSettingsService(
 ) : WorkspaceSettingsServicePort {
     override fun getSettings(workspaceId: String): Settings? = repository.getSettings(workspaceId)
 
-    override fun putSettings(workspaceId: String, settings: Settings, updatedBy: String) {
-        repository.putSettings(workspaceId, settings, updatedBy)
+    override fun putSettings(
+        workspaceId: String,
+        settings: Settings,
+        updatedBy: String,
+        preserveExistingBalanceAccounts: Boolean
+    ) {
+        val existing = repository.getSettings(workspaceId)
+        val merged = if (preserveExistingBalanceAccounts && existing?.balanceAccounts != null) {
+            settings.copy(balanceAccounts = existing.balanceAccounts)
+        } else {
+            settings
+        }
+
+        validateSettingsUpdate(existing, merged)
+        repository.putSettings(workspaceId, merged, updatedBy)
+    }
+
+    private fun validateSettingsUpdate(existing: Settings?, incoming: Settings) {
+        DomainValidation.validateSettings(incoming)
+        val existingAccounts = existing?.balanceAccounts.orEmpty().associateBy { it.accountId }
+        val incomingAccounts = incoming.balanceAccounts.orEmpty()
+
+        incomingAccounts.forEach { account ->
+            val before = existingAccounts[account.accountId] ?: return@forEach
+            validateBalanceAccountRename(before, account)
+            require(before.archivedAt == account.archivedAt) {
+                "BalanceAccount.archivedAt cannot change during rename"
+            }
+            require(before.closedAt == account.closedAt) {
+                "BalanceAccount.closedAt cannot change during rename"
+            }
+        }
+
+        val incomingIds = incomingAccounts.map { it.accountId }.toSet()
+        val removedIds = existingAccounts.keys - incomingIds
+        require(removedIds.isEmpty()) {
+            "Existing balance accounts cannot be removed"
+        }
     }
 }
-

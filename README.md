@@ -50,6 +50,7 @@ in the Lambda handler/controller, also add the corresponding route in the CDK st
 - `POST /workspaces/{workspaceId}/share` (share workspace read-only by email)
 - `GET /workspaces/{workspaceId}/settings`
 - `PUT /workspaces/{workspaceId}/settings`
+- `GET /workspaces/{workspaceId}/balance?year=YYYY&accountId=main`
 - `POST /workspaces/{workspaceId}/summaries/months`
 - `POST /workspaces/{workspaceId}/summaries/quarters`
 - `POST /workspaces/{workspaceId}/summaries/iva`
@@ -129,6 +130,37 @@ Settings CRUD:
 - `GET /workspaces/{workspaceId}/settings`
 - `PUT /workspaces/{workspaceId}/settings` (body: `autonomo.domain.Settings`)
 
+Settings may include account-aware balance definitions. Legacy clients may omit
+`balanceAccounts`; the API preserves existing account definitions on such
+updates and continues returning `openingBalance` for old clients.
+
+```json
+{
+  "year": 2026,
+  "startDate": "2026-01-01",
+  "ivaStd": 0.21,
+  "irpfRate": 0.20,
+  "obligacion130": true,
+  "openingBalance": 1000.00,
+  "balanceAccounts": [
+    {
+      "accountId": "main",
+      "kind": "MAIN",
+      "name": "Main",
+      "openingBalance": 1000.00,
+      "openingDate": "2026-01-01"
+    },
+    {
+      "accountId": "cash",
+      "kind": "CASH",
+      "name": "Cash",
+      "openingBalance": 0.00,
+      "openingDate": "2026-01-01"
+    }
+  ]
+}
+```
+
 ### Summaries payload
 
 Summaries endpoints accept `autonomo.domain.Settings` (from `autonomo-control-core`) as the request body:
@@ -174,6 +206,81 @@ October -> Q3, January -> previous year's Q4). `paymentDate` still controls
 storage keys, cash flow, and record listing.
 - BudgetEntry: `monthKey.firstDay()`
 - RegularSpending: `startDate`
+
+Transfer payloads support legacy external entries, account-aware external
+entries, and internal account transfers:
+
+```json
+{
+  "date": "2026-06-17",
+  "operation": "Inflow",
+  "amount": 1500.00,
+  "accountId": "main",
+  "note": "June salary after planned taxes"
+}
+```
+
+```json
+{
+  "date": "2026-06-17",
+  "movementType": "InternalTransfer",
+  "fromAccountId": "main",
+  "toAccountId": "cash",
+  "amount": 300.00,
+  "note": "Move salary portion to cash"
+}
+```
+
+Existing external transfer records without `accountId` are treated as Main.
+Internal transfers are stored as one `TRANSFER` record and do not change total
+balance.
+
+### Balance endpoint
+
+- `GET /workspaces/{workspaceId}/balance?year=YYYY&accountId=<accountId>`
+
+`year` filters visible ledger rows only; current balances and row-level running
+balances include prior history. `accountId` filters ledger rows to movements
+touching that account.
+
+Response:
+
+```json
+{
+  "workspaceId": "ws-123",
+  "asOfDate": "2026-06-18",
+  "year": 2026,
+  "selectedAccountId": "main",
+  "totalCurrentBalance": 1500.00,
+  "accounts": [
+    {
+      "accountId": "main",
+      "name": "Main",
+      "kind": "MAIN",
+      "archived": false,
+      "closedAt": null,
+      "currentBalance": 1200.00
+    }
+  ],
+  "ledgerRows": [
+    {
+      "recordKey": "TRANSFER#2026-06-17#rec-1",
+      "recordId": "rec-1",
+      "eventDate": "2026-06-17",
+      "movementType": "InternalTransfer",
+      "fromAccountId": "main",
+      "toAccountId": "cash",
+      "amount": 300.00,
+      "selectedAccountImpact": -300.00,
+      "totalBalanceImpact": 0.00,
+      "selectedAccountRunningBalance": 1200.00,
+      "totalRunningBalance": 1500.00,
+      "note": "Move salary portion to cash"
+    }
+  ],
+  "nextPageToken": null
+}
+```
 
 Records listing:
 - Exactly one of `month=YYYY-MM`, `quarter=YYYY-Qx`, or `year=YYYY` is required.

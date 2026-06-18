@@ -1,6 +1,8 @@
 package autonomo.util
 
 import autonomo.config.JsonSupport
+import autonomo.domain.BalanceAccount
+import autonomo.domain.BalanceMovement
 import autonomo.domain.BudgetEntry
 import autonomo.domain.Expense
 import autonomo.domain.Invoice
@@ -23,7 +25,7 @@ object RecordPayloadParser {
             RecordType.INVOICE -> JsonSupport.mapper.treeToValue(payload, Invoice::class.java)
             RecordType.EXPENSE -> JsonSupport.mapper.treeToValue(payload, Expense::class.java)
             RecordType.STATE_PAYMENT -> JsonSupport.mapper.treeToValue(payload, StatePayment::class.java)
-            RecordType.TRANSFER -> JsonSupport.mapper.treeToValue(payload, Transfer::class.java)
+            RecordType.TRANSFER -> parseBalanceMovement(payload)
             RecordType.BUDGET -> parseBudgetEntry(payload)
             RecordType.REGULAR_SPENDING -> parseRegularSpending(payload)
         }
@@ -40,7 +42,11 @@ object RecordPayloadParser {
                 expense.paymentDate ?: expense.documentDate
             }
             RecordType.STATE_PAYMENT -> (payload as StatePayment).paymentDate
-            RecordType.TRANSFER -> (payload as Transfer).date
+            RecordType.TRANSFER -> when (payload) {
+                is BalanceMovement -> payload.date
+                is Transfer -> payload.date
+                else -> throw IllegalArgumentException("Transfer payload is invalid")
+            }
             RecordType.BUDGET -> (payload as BudgetEntry).monthKey.firstDay()
             RecordType.REGULAR_SPENDING -> (payload as RegularSpending).startDate
         }
@@ -48,10 +54,42 @@ object RecordPayloadParser {
 
     fun toJson(payload: Any): String =
         when (payload) {
+            is BalanceMovement -> JsonSupport.mapper.writeValueAsString(payload.toNormalizedJson())
             is BudgetEntry -> JsonSupport.mapper.writeValueAsString(payload.toNormalizedJson())
             is RegularSpending -> JsonSupport.mapper.writeValueAsString(payload.toNormalizedJson())
             else -> JsonSupport.mapper.writeValueAsString(payload)
         }
+
+    fun parseBalanceMovement(payload: JsonNode): BalanceMovement {
+        val hasOperation = payload.hasNonNull("operation")
+        val hasMovementType = payload.hasNonNull("movementType")
+        val hasInternalFields = payload.hasNonNull("fromAccountId") || payload.hasNonNull("toAccountId")
+
+        if (hasOperation && (hasMovementType || hasInternalFields)) {
+            throw IllegalArgumentException("TRANSFER payload cannot mix operation with internal transfer fields")
+        }
+
+        return if (hasMovementType || hasInternalFields) {
+            val movementType = payload.requiredField("movementType").asText()
+            require(movementType == "InternalTransfer") { "movementType is invalid" }
+            BalanceMovement.InternalTransfer(
+                date = payload.requiredField("date").asLocalDate("date"),
+                fromAccountId = payload.requiredField("fromAccountId").asText().trim(),
+                toAccountId = payload.requiredField("toAccountId").asText().trim(),
+                amount = payload.requiredField("amount").asMoney("amount"),
+                note = payload.optionalText("note")
+            )
+        } else {
+            val transfer = JsonSupport.mapper.treeToValue(payload, Transfer::class.java)
+            BalanceMovement.External(
+                date = transfer.date,
+                operation = transfer.operation,
+                amount = transfer.amount,
+                accountId = transfer.accountId ?: BalanceAccount.MAIN_ACCOUNT_ID,
+                note = transfer.note
+            )
+        }
+    }
 
     private fun parseBudgetEntry(payload: JsonNode): BudgetEntry {
         val monthKey = payload.requiredField("monthKey").asMonthKey("monthKey")
@@ -195,6 +233,26 @@ object RecordPayloadParser {
             }
         }
         obj.put("amount", amount.amount)
+        return obj
+    }
+
+    private fun BalanceMovement.toNormalizedJson(): JsonNode {
+        val obj = JsonSupport.mapper.createObjectNode()
+        obj.put("date", date.toString())
+        when (this) {
+            is BalanceMovement.External -> {
+                obj.put("operation", operation.name)
+                obj.put("amount", amount.amount)
+                obj.put("accountId", accountId)
+            }
+            is BalanceMovement.InternalTransfer -> {
+                obj.put("movementType", "InternalTransfer")
+                obj.put("fromAccountId", fromAccountId)
+                obj.put("toAccountId", toAccountId)
+                obj.put("amount", amount.amount)
+            }
+        }
+        note?.let { obj.put("note", it) }
         return obj
     }
 }

@@ -11,7 +11,6 @@ import autonomo.domain.RentaEstimate
 import autonomo.domain.RentaPlanner
 import autonomo.domain.Settings
 import autonomo.domain.StatePayment
-import autonomo.domain.Transfer
 import autonomo.model.MonthSummariesResponse
 import autonomo.model.IvaSummaryResponse
 import autonomo.model.QuarterSummariesResponse
@@ -108,15 +107,13 @@ class SummariesService(
     private data class ParsedRecords(
         val invoices: List<Invoice>,
         val expenses: List<Expense>,
-        val payments: List<StatePayment>,
-        val transfers: List<Transfer>
+        val payments: List<StatePayment>
     )
 
     private fun parseRecords(records: List<RecordItem>): ParsedRecords {
         val invoices = mutableListOf<Invoice>()
         val expenses = mutableListOf<Expense>()
         val payments = mutableListOf<StatePayment>()
-        val transfers = mutableListOf<Transfer>()
 
         records.forEach { item ->
             val payloadNode = JsonSupport.mapper.readTree(item.payloadJson)
@@ -124,7 +121,7 @@ class SummariesService(
                 RecordType.INVOICE -> invoices += (RecordPayloadParser.parse(item.recordType, payloadNode) as Invoice)
                 RecordType.EXPENSE -> expenses += (RecordPayloadParser.parse(item.recordType, payloadNode) as Expense)
                 RecordType.STATE_PAYMENT -> payments += (RecordPayloadParser.parse(item.recordType, payloadNode) as StatePayment)
-                RecordType.TRANSFER -> transfers += (RecordPayloadParser.parse(item.recordType, payloadNode) as Transfer)
+                RecordType.TRANSFER -> Unit
                 RecordType.BUDGET -> Unit
                 RecordType.REGULAR_SPENDING -> Unit
             }
@@ -133,8 +130,7 @@ class SummariesService(
         return ParsedRecords(
             invoices = invoices,
             expenses = expenses,
-            payments = payments,
-            transfers = transfers
+            payments = payments
         )
     }
 
@@ -142,6 +138,5 @@ class SummariesService(
         parsed.invoices.forEach(domainService::registerInvoice)
         parsed.expenses.forEach(domainService::registerExpense)
         parsed.payments.forEach(domainService::recordStatePayment)
-        parsed.transfers.forEach(domainService::recordTransfer)
     }
 }

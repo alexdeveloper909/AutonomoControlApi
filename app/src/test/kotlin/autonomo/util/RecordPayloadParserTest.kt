@@ -1,6 +1,8 @@
 package autonomo.util
 
 import autonomo.config.JsonSupport
+import autonomo.domain.BalanceAccount
+import autonomo.domain.BalanceMovement
 import autonomo.domain.BudgetEntry
 import autonomo.domain.Expense
 import autonomo.domain.Invoice
@@ -15,7 +17,6 @@ import autonomo.domain.RegularSpendingScheduleType
 import autonomo.domain.RetencionRate
 import autonomo.domain.StatePayment
 import autonomo.domain.StatePaymentType
-import autonomo.domain.Transfer
 import autonomo.domain.TransferOp
 import autonomo.model.RecordType
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -181,7 +182,7 @@ class RecordPayloadParserTest {
 
     @Test
     fun transferEventDateUsesDate() {
-        val transfer = Transfer(
+        val transfer = BalanceMovement.External(
             date = LocalDate.parse("2024-09-01"),
             operation = TransferOp.Inflow,
             amount = Money(BigDecimal("150")),
@@ -191,6 +192,90 @@ class RecordPayloadParserTest {
         val eventDate = RecordPayloadParser.eventDate(RecordType.TRANSFER, transfer)
 
         assertEquals(LocalDate.parse("2024-09-01"), eventDate)
+    }
+
+    @Test
+    fun parsesExternalTransferWithAccountId() {
+        val payload = JsonSupport.mapper.readTree(
+            """
+            {
+              "date": "2026-06-17",
+              "operation": "Inflow",
+              "amount": 1500.00,
+              "accountId": "cash",
+              "note": "Cash sale"
+            }
+            """.trimIndent()
+        )
+
+        val movement = RecordPayloadParser.parse(RecordType.TRANSFER, payload) as BalanceMovement.External
+
+        assertEquals("cash", movement.accountId)
+        assertEquals(TransferOp.Inflow, movement.operation)
+        assertMoneyEquals("1500.00", movement.amount)
+    }
+
+    @Test
+    fun parsesLegacyExternalTransferWithoutAccountIdAsMain() {
+        val payload = JsonSupport.mapper.readTree(
+            """
+            {
+              "date": "2026-06-17",
+              "operation": "Outflow",
+              "amount": 25.00
+            }
+            """.trimIndent()
+        )
+
+        val movement = RecordPayloadParser.parse(RecordType.TRANSFER, payload) as BalanceMovement.External
+
+        assertEquals(BalanceAccount.MAIN_ACCOUNT_ID, movement.accountId)
+        assertEquals(TransferOp.Outflow, movement.operation)
+    }
+
+    @Test
+    fun parsesInternalTransferPayload() {
+        val payload = JsonSupport.mapper.readTree(
+            """
+            {
+              "date": "2026-06-17",
+              "movementType": "InternalTransfer",
+              "fromAccountId": "main",
+              "toAccountId": "cash",
+              "amount": 300.00,
+              "note": "ATM"
+            }
+            """.trimIndent()
+        )
+
+        val movement = RecordPayloadParser.parse(RecordType.TRANSFER, payload) as BalanceMovement.InternalTransfer
+        val json = JsonSupport.mapper.readTree(RecordPayloadParser.toJson(movement))
+
+        assertEquals("main", movement.fromAccountId)
+        assertEquals("cash", movement.toAccountId)
+        assertEquals("InternalTransfer", json.get("movementType").asText())
+        assertEquals(false, json.has("operation"))
+    }
+
+    @Test
+    fun rejectsAmbiguousTransferPayload() {
+        val payload = JsonSupport.mapper.readTree(
+            """
+            {
+              "date": "2026-06-17",
+              "operation": "Outflow",
+              "fromAccountId": "main",
+              "toAccountId": "cash",
+              "amount": 300.00
+            }
+            """.trimIndent()
+        )
+
+        val error = org.junit.jupiter.api.assertThrows<IllegalArgumentException> {
+            RecordPayloadParser.parse(RecordType.TRANSFER, payload)
+        }
+
+        assertEquals("TRANSFER payload cannot mix operation with internal transfer fields", error.message)
     }
 
     @Test

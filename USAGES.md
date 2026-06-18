@@ -83,6 +83,11 @@ Success response (204): empty body.
 - `GET /workspaces/{workspaceId}/settings`
 - `PUT /workspaces/{workspaceId}/settings`
 
+Settings may include `balanceAccounts`. The default Main account uses
+`accountId: "main"`, and old clients may continue sending only
+`openingBalance`; when an update omits `balanceAccounts`, the API preserves any
+persisted account definitions.
+
 ## Regular spendings (recurring expenses)
 
 These endpoints are specialized helpers for “Regular spendings” UI screens.
@@ -308,7 +313,23 @@ months (April -> Q1, July -> Q2, October -> Q3, January -> previous year's Q4).
   "date": "2024-07-02",
   "operation": "Inflow",
   "amount": 150.00,
+  "accountId": "main",
   "note": "Owner draw"
+}
+```
+
+Legacy external transfer payloads without `accountId` are treated as Main.
+Internal account transfers use a distinct discriminator and net to zero at the
+total-balance level:
+
+```json
+{
+  "date": "2026-06-17",
+  "movementType": "InternalTransfer",
+  "fromAccountId": "main",
+  "toAccountId": "cash",
+  "amount": 300.00,
+  "note": "ATM"
 }
 ```
 
@@ -359,8 +380,57 @@ Compatibility:
 - BudgetEntry: `monthKey.firstDay()` (stored as `YYYY-MM-01`)
 - RegularSpending: `startDate`
 
-For updates, the `eventDate` in the path must match the existing record key.
-For BudgetEntry updates, this means `monthKey` cannot be changed.
+For updates, the `eventDate` in the path identifies the existing record key.
+For `TRANSFER` updates, changing `date` moves the stored item to the matching
+`TRANSFER#<new-date>#<same-record-id>` key while preserving `recordId` and
+creation metadata. For BudgetEntry updates, `monthKey` cannot be changed.
+
+## Balance
+
+- `GET /workspaces/{workspaceId}/balance?year=YYYY&accountId=<accountId>`
+
+The endpoint loads persisted settings and all `TRANSFER` records. `year` filters
+visible ledger rows only; current balances and running balances include prior
+history. `accountId` filters rows to movements touching that account.
+
+Success response (200):
+
+```json
+{
+  "workspaceId": "ws-123",
+  "asOfDate": "2026-06-18",
+  "year": 2026,
+  "selectedAccountId": "main",
+  "totalCurrentBalance": 1500.00,
+  "accounts": [
+    {
+      "accountId": "main",
+      "name": "Main",
+      "kind": "MAIN",
+      "archived": false,
+      "closedAt": null,
+      "currentBalance": 1200.00
+    }
+  ],
+  "ledgerRows": [
+    {
+      "recordKey": "TRANSFER#2026-06-17#rec-1",
+      "recordId": "rec-1",
+      "eventDate": "2026-06-17",
+      "movementType": "InternalTransfer",
+      "fromAccountId": "main",
+      "toAccountId": "cash",
+      "amount": 300.00,
+      "selectedAccountImpact": -300.00,
+      "totalBalanceImpact": 0.00,
+      "selectedAccountRunningBalance": 1200.00,
+      "totalRunningBalance": 1500.00,
+      "note": "ATM"
+    }
+  ],
+  "nextPageToken": null
+}
+```
 
 ## Error responses
 
@@ -407,6 +477,7 @@ Required routes (CDK deploys these explicitly; add more when you add new endpoin
 - `POST /workspaces`
 - `GET /workspaces/{workspaceId}/settings`
 - `PUT /workspaces/{workspaceId}/settings`
+- `GET /workspaces/{workspaceId}/balance`
 - `POST /workspaces/{workspaceId}/share`
 - `GET /workspaces/{workspaceId}/regular-spendings`
 - `GET /workspaces/{workspaceId}/regular-spendings/occurrences`
