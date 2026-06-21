@@ -3,9 +3,15 @@ package autonomo.service
 import autonomo.config.JsonSupport
 import autonomo.domain.BalanceAccount
 import autonomo.domain.BalanceAccountKind
+import autonomo.domain.BusinessEntity
+import autonomo.domain.BusinessEntityType
 import autonomo.domain.Money
+import autonomo.domain.MonthKey
 import autonomo.domain.Rate
 import autonomo.domain.Settings
+import autonomo.domain.UkrainianFopSocialContributionSettings
+import autonomo.domain.UkrainianFopSocialContributionYearSettings
+import autonomo.domain.UkrainianFopTaxRates
 import autonomo.model.RecordRequest
 import autonomo.model.RecordItem
 import autonomo.model.RecordType
@@ -16,6 +22,7 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
+import java.math.BigDecimal
 import java.time.Instant
 import java.time.LocalDate
 import java.time.YearMonth
@@ -538,6 +545,180 @@ class RecordsServiceTest {
         assertEquals("Balance movement cannot create a new archived account reference", error.message)
     }
 
+    @Test
+    fun createUkrainianFopInvoiceStoresReceivedDateKeyAndNormalizedPayload() {
+        val repo = FakeRecordsRepository()
+        val service = RecordsService(repo, FakeSettingsRepository(fopSettings()))
+
+        val response = service.createRecord(
+            workspaceId = "ws-1",
+            userId = "user-1",
+            request = RecordRequest(RecordType.BUSINESS_ENTITY_INVOICE, payload = ukrainianFopPayload())
+        )
+
+        val storedPayload = JsonSupport.mapper.readTree(repo.created.single().payloadJson)
+        assertEquals(LocalDate.parse("2026-06-15"), response.eventDate)
+        assertEquals("BUSINESS_ENTITY_INVOICE#2026-06-15#${response.recordId}", response.recordKey)
+        assertEquals("2026-06-15", storedPayload.get("exchangeRateDate").asText())
+        assertEquals(false, storedPayload.has("amountTaxCurrencySnapshot"))
+    }
+
+    @Test
+    fun createUkrainianFopInvoiceRejectsUnknownEntity() {
+        val service = RecordsService(FakeRecordsRepository(), FakeSettingsRepository(accountSettings()))
+
+        val error = assertThrows<IllegalArgumentException> {
+            service.createRecord(
+                workspaceId = "ws-1",
+                userId = "user-1",
+                request = RecordRequest(RecordType.BUSINESS_ENTITY_INVOICE, payload = ukrainianFopPayload())
+            )
+        }
+
+        assertEquals("business entity not found", error.message)
+    }
+
+    @Test
+    fun createUkrainianFopInvoiceRejectsDuplicateNumberPerEntityAndReceivedDateYear() {
+        val existing = businessEntityInvoiceItem("rec-existing", ukrainianFopPayload(number = " fop-1 "))
+        val repo = FakeRecordsRepository(
+            itemsByRecordKeyPrefix = mapOf("BUSINESS_ENTITY_INVOICE#2026-" to listOf(existing))
+        )
+        val service = RecordsService(repo, FakeSettingsRepository(fopSettings()))
+
+        val error = assertThrows<IllegalArgumentException> {
+            service.createRecord(
+                workspaceId = "ws-1",
+                userId = "user-1",
+                request = RecordRequest(RecordType.BUSINESS_ENTITY_INVOICE, payload = ukrainianFopPayload(number = "FOP-1"))
+            )
+        }
+
+        assertEquals("UkrainianFopInvoice.number must be unique per entity and received-date year", error.message)
+    }
+
+    @Test
+    fun updateUkrainianFopInvoiceCanMoveReceivedDateKey() {
+        val existing = businessEntityInvoiceItem("rec-1", ukrainianFopPayload(receivedDate = "2026-06-15"))
+        val repo = FakeRecordsRepository(itemsByGetKey = mapOf(existing.recordKey to existing))
+        val service = RecordsService(repo, FakeSettingsRepository(fopSettings()))
+
+        val response = service.updateRecord(
+            workspaceId = "ws-1",
+            userId = "user-2",
+            recordType = RecordType.BUSINESS_ENTITY_INVOICE,
+            eventDate = LocalDate.parse("2026-06-15"),
+            recordId = "rec-1",
+            request = RecordRequest(
+                RecordType.BUSINESS_ENTITY_INVOICE,
+                payload = ukrainianFopPayload(receivedDate = "2026-07-02", number = "FOP-2")
+            )
+        )
+
+        assertEquals("BUSINESS_ENTITY_INVOICE#2026-07-02#rec-1", response!!.recordKey)
+        assertEquals("BUSINESS_ENTITY_INVOICE#2026-07-02#rec-1", repo.created.single().recordKey)
+        assertEquals(listOf(existing.recordKey), repo.deletedKeys)
+    }
+
+    @Test
+    fun deleteUkrainianFopInvoiceRejectsArchivedEntity() {
+        val existing = businessEntityInvoiceItem("rec-1", ukrainianFopPayload())
+        val repo = FakeRecordsRepository(itemsByGetKey = mapOf(existing.recordKey to existing))
+        val service = RecordsService(repo, FakeSettingsRepository(fopSettings(archived = true)))
+
+        val error = assertThrows<IllegalArgumentException> {
+            service.deleteRecord("ws-1", existing.recordKey)
+        }
+
+        assertEquals("Archived business entity invoices are read-only", error.message)
+        assertEquals(emptyList<String>(), repo.deletedKeys)
+    }
+
+    @Test
+    fun archivedUkrainianFopInvoiceCanBeReadButCannotBeCreatedEditedOrDeleted() {
+        val existing = businessEntityInvoiceItem("rec-1", ukrainianFopPayload())
+        val repo = FakeRecordsRepository(itemsByGetKey = mapOf(existing.recordKey to existing))
+        val service = RecordsService(repo, FakeSettingsRepository(fopSettings(archived = true)))
+
+        val read = service.getRecord("ws-1", existing.recordKey)
+        assertEquals("rec-1", read!!.recordId)
+
+        val createError = assertThrows<IllegalArgumentException> {
+            service.createRecord(
+                workspaceId = "ws-1",
+                userId = "user-1",
+                request = RecordRequest(RecordType.BUSINESS_ENTITY_INVOICE, payload = ukrainianFopPayload(number = "FOP-2"))
+            )
+        }
+        assertEquals("Archived business entity invoices are read-only", createError.message)
+
+        val updateError = assertThrows<IllegalArgumentException> {
+            service.updateRecord(
+                workspaceId = "ws-1",
+                userId = "user-2",
+                recordType = RecordType.BUSINESS_ENTITY_INVOICE,
+                eventDate = LocalDate.parse("2026-06-15"),
+                recordId = "rec-1",
+                request = RecordRequest(RecordType.BUSINESS_ENTITY_INVOICE, payload = ukrainianFopPayload(number = "FOP-2"))
+            )
+        }
+        assertEquals("Archived business entity invoices are read-only", updateError.message)
+
+        val deleteError = assertThrows<IllegalArgumentException> {
+            service.deleteRecord("ws-1", existing.recordKey)
+        }
+        assertEquals("Archived business entity invoices are read-only", deleteError.message)
+    }
+
+    @Test
+    fun deleteUkrainianFopInvoiceHardDeletesActiveEntityInvoice() {
+        val existing = businessEntityInvoiceItem("rec-1", ukrainianFopPayload())
+        val repo = FakeRecordsRepository(
+            itemsByRecordKeyPrefix = mapOf("BUSINESS_ENTITY_INVOICE#2026-" to listOf(existing)),
+            itemsByGetKey = mapOf(existing.recordKey to existing)
+        )
+        val settingsRepository = FakeSettingsRepository(fopSettings())
+        val service = RecordsService(repo, settingsRepository)
+        val summaries = BusinessEntitiesService(settingsRepository, repo)
+
+        assertEquals(1, summaries.ukrainianFopSummary("ws-1", "ent_fop", 2026).summary.totals.invoiceCount)
+
+        service.deleteRecord("ws-1", existing.recordKey)
+
+        assertEquals(listOf(existing.recordKey), repo.deletedKeys)
+        assertNull(service.getRecord("ws-1", existing.recordKey))
+        assertEquals(
+            emptyList<String>(),
+            service.listByYear(
+                workspaceId = "ws-1",
+                year = 2026,
+                recordType = RecordType.BUSINESS_ENTITY_INVOICE,
+                options = RecordsListOptions(entityId = "ent_fop")
+            ).items.map { it.recordId }
+        )
+        assertEquals(0, summaries.ukrainianFopSummary("ws-1", "ent_fop", 2026).summary.totals.invoiceCount)
+    }
+
+    @Test
+    fun listUkrainianFopInvoicesFiltersByEntityAndSortsByReceivedDate() {
+        val first = businessEntityInvoiceItem("rec-1", ukrainianFopPayload(receivedDate = "2026-06-15"))
+        val second = businessEntityInvoiceItem("rec-2", ukrainianFopPayload(receivedDate = "2026-07-02", number = "FOP-2"))
+        val other = businessEntityInvoiceItem("rec-3", ukrainianFopPayload(entityId = "ent_other", receivedDate = "2026-08-01", number = "OTHER"))
+        val repo = FakeRecordsRepository(
+            itemsByRecordKeyPrefix = mapOf("BUSINESS_ENTITY_INVOICE#2026-" to listOf(first, second, other))
+        )
+        val service = RecordsService(repo, FakeSettingsRepository(fopSettings()))
+
+        val response = service.listByYear(
+            workspaceId = "ws-1",
+            year = 2026,
+            recordType = RecordType.BUSINESS_ENTITY_INVOICE,
+            options = RecordsListOptions(sort = RecordsSort.EVENT_DATE_DESC, entityId = "ent_fop")
+        )
+
+        assertEquals(listOf("rec-2", "rec-1"), response.items.map { it.recordId })
+    }
+
     private class FakeRecordsRepository(
         private val itemsByMonth: Map<String, List<RecordItem>> = emptyMap(),
         private val itemsByQuarter: Map<String, List<RecordItem>> = emptyMap(),
@@ -557,7 +738,8 @@ class RecordsServiceTest {
             updated += record
         }
 
-        override fun get(workspaceId: String, recordKey: String): RecordItem? = itemsByGetKey[recordKey]
+        override fun get(workspaceId: String, recordKey: String): RecordItem? =
+            itemsByGetKey[recordKey]?.takeUnless { it.recordKey in deletedKeys }
         override fun delete(workspaceId: String, recordKey: String) {
             deletedKeys += recordKey
         }
@@ -568,6 +750,7 @@ class RecordsServiceTest {
         override fun queryByWorkspaceRecordKeyPrefix(workspaceId: String, recordKeyPrefix: String): List<RecordItem> {
             queriedPrefixes.add(recordKeyPrefix)
             return itemsByRecordKeyPrefix[recordKeyPrefix].orEmpty()
+                .filterNot { it.recordKey in deletedKeys }
         }
 
         override fun queryByMonth(workspaceMonth: String, recordType: RecordType?): List<RecordItem> =
@@ -646,6 +829,90 @@ class RecordsServiceTest {
                 cashAccount
             )
         )
+
+    private fun fopSettings(archived: Boolean = false): Settings =
+        accountSettings().copy(
+            entities = listOf(
+                BusinessEntity(
+                    entityId = "ent_fop",
+                    type = BusinessEntityType.UKRAINIAN_FOP_GROUP3_SIMPLIFIED,
+                    name = "Ukrainian FOP",
+                    taxCurrency = "UAH",
+                    invoiceCurrencies = listOf("USD", "UAH"),
+                    taxRatesByYear = mapOf(2026 to UkrainianFopTaxRates()),
+                    socialContribution = UkrainianFopSocialContributionSettings(
+                        byYear = mapOf(
+                            2026 to UkrainianFopSocialContributionYearSettings(
+                                enabled = true,
+                                monthlyAmountsUah = MonthKey.janToDec(2026).associateWith { Money(BigDecimal("1760.00")) }
+                            )
+                        )
+                    ),
+                    archivedAt = if (archived) Instant.parse("2026-08-01T00:00:00Z") else null
+                ),
+                BusinessEntity(
+                    entityId = "ent_other",
+                    type = BusinessEntityType.UKRAINIAN_FOP_GROUP3_SIMPLIFIED,
+                    name = "Other FOP",
+                    taxCurrency = "UAH",
+                    invoiceCurrencies = listOf("USD", "UAH"),
+                    taxRatesByYear = mapOf(2026 to UkrainianFopTaxRates()),
+                    socialContribution = UkrainianFopSocialContributionSettings(
+                        byYear = mapOf(
+                            2026 to UkrainianFopSocialContributionYearSettings(
+                                enabled = true,
+                                monthlyAmountsUah = MonthKey.janToDec(2026).associateWith { Money(BigDecimal("1760.00")) }
+                            )
+                        )
+                    )
+                )
+            )
+        )
+
+    private fun businessEntityInvoiceItem(recordId: String, payload: com.fasterxml.jackson.databind.JsonNode): RecordItem {
+        val parsed = autonomo.util.RecordPayloadParser.parse(RecordType.BUSINESS_ENTITY_INVOICE, payload)
+        val eventDate = autonomo.util.RecordPayloadParser.eventDate(RecordType.BUSINESS_ENTITY_INVOICE, parsed)
+        val now = Instant.parse("2024-06-21T09:30:00Z")
+        return RecordItem(
+            workspaceId = "ws-1",
+            recordKey = "BUSINESS_ENTITY_INVOICE#$eventDate#$recordId",
+            recordId = recordId,
+            recordType = RecordType.BUSINESS_ENTITY_INVOICE,
+            eventDate = eventDate,
+            payloadJson = autonomo.util.RecordPayloadParser.toJson(parsed),
+            workspaceMonth = "WS#ws-1#M#${eventDate.toString().substring(0, 7)}",
+            workspaceQuarter = "WS#ws-1#Q#${eventDate.year}-Q${((eventDate.monthValue - 1) / 3) + 1}",
+            createdAt = now,
+            updatedAt = now,
+            createdBy = "user-1",
+            updatedBy = "user-1"
+        )
+    }
+
+    private fun ukrainianFopPayload(
+        entityId: String = "ent_fop",
+        receivedDate: String = "2026-06-15",
+        number: String = "FOP-1"
+    ) = JsonSupport.mapper.readTree(
+        """
+        {
+          "entityId": "$entityId",
+          "invoiceType": "UKRAINIAN_FOP",
+          "invoiceDate": "2026-06-01",
+          "receivedDate": "$receivedDate",
+          "number": "$number",
+          "client": "Acme",
+          "amount": 1000.00,
+          "currency": "USD",
+          "taxCurrency": "UAH",
+          "exchangeRateToTaxCurrency": 40.50,
+          "exchangeRateSource": "NBU",
+          "exchangeRateDate": "$receivedDate",
+          "exchangeRateFetchedAt": "2026-06-15T10:00:00Z",
+          "amountTaxCurrency": 40500.00
+        }
+        """.trimIndent()
+    )
 
     private fun defaultPayload(recordType: RecordType, eventDate: LocalDate): String =
         when (recordType) {

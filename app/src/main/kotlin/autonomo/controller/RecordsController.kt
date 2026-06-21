@@ -138,12 +138,23 @@ class RecordsController(
                 return HttpResponses.badRequest("limit is invalid")
             } else null
         val nextToken = queryParams["nextToken"]?.takeIf { it.isNotBlank() }
+        val entityId = queryParams["entityId"]?.takeIf { it.isNotBlank() }
 
         if (nextToken != null && limit == null) {
             return HttpResponses.badRequest("limit is required when nextToken is provided")
         }
 
-        val options = RecordsListOptions(sort = sort, limit = limit, nextToken = nextToken)
+        if (recordType == RecordType.BUSINESS_ENTITY_INVOICE && entityId == null) {
+            return HttpResponses.badRequest("entityId is required for BUSINESS_ENTITY_INVOICE records")
+        }
+        if (recordType != null && recordType != RecordType.BUSINESS_ENTITY_INVOICE && entityId != null) {
+            return HttpResponses.badRequest("entityId is not supported for this recordType")
+        }
+        if (recordType == null && entityId != null) {
+            return HttpResponses.badRequest("entityId requires recordType=BUSINESS_ENTITY_INVOICE")
+        }
+
+        val options = RecordsListOptions(sort = sort, limit = limit, nextToken = nextToken, entityId = entityId)
 
         return runCatching {
             when {

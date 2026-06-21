@@ -33,7 +33,8 @@ class WorkspaceSettingsController(
                 workspaceId = workspaceId,
                 settings = parsed.settings,
                 updatedBy = caller.userId,
-                preserveExistingBalanceAccounts = !parsed.includesBalanceAccounts
+                preserveExistingBalanceAccounts = !parsed.includesBalanceAccounts,
+                preserveExistingEntities = !parsed.includesEntities
             )
             val responseSettings = service.getSettings(workspaceId) ?: parsed.settings
             HttpResponses.ok(mapOf("workspaceId" to workspaceId, "settings" to responseSettings))
@@ -42,7 +43,11 @@ class WorkspaceSettingsController(
         }
     }
 
-    private data class ParsedSettings(val settings: Settings, val includesBalanceAccounts: Boolean)
+    private data class ParsedSettings(
+        val settings: Settings,
+        val includesBalanceAccounts: Boolean,
+        val includesEntities: Boolean
+    )
 
     private fun parseSettings(body: String?): ParsedSettings? {
         if (body.isNullOrBlank()) return null
@@ -50,7 +55,8 @@ class WorkspaceSettingsController(
             val node = autonomo.config.JsonSupport.mapper.readTree(body)
             ParsedSettings(
                 settings = autonomo.config.JsonSupport.mapper.treeToValue(node, Settings::class.java),
-                includesBalanceAccounts = node.has("balanceAccounts")
+                includesBalanceAccounts = node.has("balanceAccounts"),
+                includesEntities = node.has("entities")
             )
         }.getOrNull()
     }

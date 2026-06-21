@@ -57,6 +57,12 @@ in the Lambda handler/controller, also add the corresponding route in the CDK st
 - `POST /workspaces/{workspaceId}/summaries/renta`
 - `GET /workspaces/{workspaceId}/regular-spendings`
 - `GET /workspaces/{workspaceId}/regular-spendings/occurrences?from=YYYY-MM-DD&to=YYYY-MM-DD`
+- `GET /workspaces/{workspaceId}/business-entities?includeArchived=true`
+- `POST /workspaces/{workspaceId}/business-entities`
+- `PUT /workspaces/{workspaceId}/business-entities/{entityId}`
+- `POST /workspaces/{workspaceId}/business-entities/{entityId}/archive`
+- `GET /workspaces/{workspaceId}/business-entities/{entityId}/summary?year=YYYY`
+- `GET /exchange-rates/nbu?currency=USD&date=YYYY-MM-DD`
 - `POST /workspaces/{workspaceId}/records`
   - body:
     ```json
@@ -78,6 +84,7 @@ in the Lambda handler/controller, also add the corresponding route in the CDK st
 - `GET /workspaces/{workspaceId}/records?month=YYYY-MM&recordType=INVOICE&sort=eventDateDesc&limit=50&nextToken=...`
 - `GET /workspaces/{workspaceId}/records?quarter=YYYY-Q1&recordType=EXPENSE&sort=eventDateDesc&limit=50&nextToken=...`
 - `GET /workspaces/{workspaceId}/records?year=YYYY&recordType=INVOICE&sort=eventDateDesc&limit=50&nextToken=...`
+- `GET /workspaces/{workspaceId}/records?year=YYYY&recordType=BUSINESS_ENTITY_INVOICE&entityId=ent_...&sort=eventDateDesc&limit=50&nextToken=...`
 - `GET /workspaces/{workspaceId}/records/{recordType}/{eventDate}/{recordId}`
 - `PUT /workspaces/{workspaceId}/records/{recordType}/{eventDate}/{recordId}`
   - body uses the same schema as create; `recordType` must match the path
@@ -130,9 +137,13 @@ Settings CRUD:
 - `GET /workspaces/{workspaceId}/settings`
 - `PUT /workspaces/{workspaceId}/settings` (body: `autonomo.domain.Settings`)
 
-Settings may include account-aware balance definitions. Legacy clients may omit
-`balanceAccounts`; the API preserves existing account definitions on such
-updates and continues returning `openingBalance` for old clients.
+Settings may include account-aware balance definitions and persisted business
+entities. Legacy clients may omit `balanceAccounts`; the API preserves existing
+account definitions on such updates and continues returning `openingBalance`
+for old clients. Generic `PUT /settings` also preserves `entities` when omitted
+and rejects direct entity mutations when included. Create, update, and archive
+business entities through `/business-entities` endpoints so the API can enforce
+server-generated IDs and system timestamps.
 
 ```json
 {
@@ -160,6 +171,121 @@ updates and continues returning `openingBalance` for old clients.
   ]
 }
 ```
+
+Business entities are embedded in settings:
+
+```json
+{
+  "entities": [
+    {
+      "entityId": "ent_01JYEXAMPLEFOP",
+      "type": "UKRAINIAN_FOP_GROUP3_SIMPLIFIED",
+      "name": "Ukrainian FOP",
+      "taxCurrency": "UAH",
+      "invoiceCurrencies": ["USD", "UAH"],
+      "taxRatesByYear": {
+        "2026": {
+          "singleTaxRate": 0.05,
+          "militaryLevyRate": 0.01
+        }
+      },
+      "socialContribution": {
+        "byYear": {
+          "2026": {
+            "enabled": false,
+            "exemptionReason": "DISABILITY"
+          }
+        }
+      },
+      "createdAt": "2026-06-21T09:30:00Z",
+      "updatedAt": "2026-06-21T09:30:00Z"
+    }
+  ]
+}
+```
+
+### Business entities
+
+Business-entity listing returns the synthetic built-in Autonomo selector plus
+persisted user-created entities. Archived entities are hidden unless
+`includeArchived=true`.
+
+Create/update body:
+
+```json
+{
+  "type": "UKRAINIAN_FOP_GROUP3_SIMPLIFIED",
+  "name": "Ukrainian FOP",
+  "taxCurrency": "UAH",
+  "invoiceCurrencies": ["USD", "UAH"],
+  "taxRatesByYear": {
+    "2026": {
+      "singleTaxRate": 0.05,
+      "militaryLevyRate": 0.01
+    }
+  },
+  "socialContribution": {
+    "byYear": {
+      "2026": {
+        "enabled": false,
+        "exemptionReason": "DISABILITY"
+      }
+    }
+  },
+  "confirmHistoricalSummaryChange": false
+}
+```
+
+Clients must not send `entityId` on create. The API generates it, sets
+`createdAt`/`updatedAt`, rejects `entityId = "autonomo"`, and preserves
+immutable/system fields on update. Removing an invoice currency is rejected
+when existing invoices use that currency. Archive is a metadata update; invoices
+for archived entities remain readable as history but cannot be created, edited,
+or deleted.
+
+### Ukrainian FOP invoices
+
+Ukrainian FOP invoices use the existing generic records endpoints with
+`recordType = "BUSINESS_ENTITY_INVOICE"` and must be listed with an `entityId`
+filter. `receivedDate` controls the record key/event date, tax year, summary
+grouping, and invoice-number uniqueness year.
+
+```json
+{
+  "recordType": "BUSINESS_ENTITY_INVOICE",
+  "payload": {
+    "entityId": "ent_01JYEXAMPLEFOP",
+    "invoiceType": "UKRAINIAN_FOP",
+    "invoiceDate": "2026-06-01",
+    "receivedDate": "2026-06-15",
+    "number": "FOP-2026-001",
+    "client": "Acme",
+    "amount": 1000.00,
+    "currency": "USD",
+    "taxCurrency": "UAH",
+    "exchangeRateToTaxCurrency": 40.50,
+    "exchangeRateSource": "NBU",
+    "exchangeRateDate": "2026-06-15",
+    "exchangeRateFetchedAt": "2026-06-15T10:00:00Z",
+    "amountTaxCurrency": 40500.00
+  }
+}
+```
+
+For manual rates, omit `exchangeRateFetchedAt` and use
+`exchangeRateSource = "MANUAL"`. The API validates `taxCurrency = "UAH"`, MVP
+invoice currencies `USD|UAH`, amount rounding tolerance, active entity
+references, and invoice-number uniqueness per entity and received-date year.
+
+`GET /workspaces/{workspaceId}/business-entities/{entityId}/summary?year=YYYY`
+returns the Ukrainian FOP year summary with month rows, quarter totals, year
+totals, `effectiveYearSettings`, `isComplete`, and stable warning codes such as
+`MISSING_TAX_RATES` and `MISSING_SOCIAL_CONTRIBUTION_MONTHS`.
+
+`GET /exchange-rates/nbu?currency=USD&date=YYYY-MM-DD` returns the official NBU
+USD-to-UAH rate for the date. UAH invoices should use `1.0` locally and do not
+need lookup. The endpoint returns a clear error when NBU lookup fails so clients
+can fall back to manual entry.
 
 ### Summaries payload
 

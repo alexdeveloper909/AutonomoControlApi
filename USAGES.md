@@ -88,6 +88,90 @@ Settings may include `balanceAccounts`. The default Main account uses
 `openingBalance`; when an update omits `balanceAccounts`, the API preserves any
 persisted account definitions.
 
+Settings may also contain `entities`, but generic settings updates preserve
+existing entities when omitted and reject direct entity mutations when included.
+Use the business-entity endpoints below for create/update/archive.
+
+## Business entities
+
+Business entity reads are allowed for read-only shared workspace members.
+Mutations require write access.
+
+### List business entities
+
+- `GET /workspaces/{workspaceId}/business-entities`
+- Optional query: `includeArchived=true`
+
+The response includes the synthetic built-in Autonomo selector plus persisted
+user-created entities. Archived entities are hidden unless requested.
+
+### Create Ukrainian FOP entity
+
+- `POST /workspaces/{workspaceId}/business-entities`
+
+Body:
+```json
+{
+  "type": "UKRAINIAN_FOP_GROUP3_SIMPLIFIED",
+  "name": "Ukrainian FOP",
+  "taxCurrency": "UAH",
+  "invoiceCurrencies": ["USD", "UAH"],
+  "taxRatesByYear": {
+    "2026": { "singleTaxRate": 0.05, "militaryLevyRate": 0.01 }
+  },
+  "socialContribution": {
+    "byYear": {
+      "2026": { "enabled": false, "exemptionReason": "DISABILITY" }
+    }
+  }
+}
+```
+
+Success response (201):
+```json
+{ "entity": { "entityId": "ent_...", "type": "UKRAINIAN_FOP_GROUP3_SIMPLIFIED" } }
+```
+
+The client must not send `entityId`; it is server-generated. For enabled social
+contribution, provide all 12 `monthlyAmountsUah` entries for the initial year.
+
+### Update or archive business entity
+
+- `PUT /workspaces/{workspaceId}/business-entities/{entityId}`
+- `POST /workspaces/{workspaceId}/business-entities/{entityId}/archive`
+
+Update uses the same mutable fields as create and preserves immutable/system
+fields. If year-specific settings are changed for an entity/year with existing
+invoices, send `confirmHistoricalSummaryChange: true`.
+
+### Ukrainian FOP summary
+
+- `GET /workspaces/{workspaceId}/business-entities/{entityId}/summary?year=YYYY`
+
+Success response includes `entity`, `summary`, and `isComplete`. The summary has
+month rows, quarter totals, year totals, `effectiveYearSettings`, invoice
+counts, and warning codes such as `MISSING_TAX_RATES` and
+`MISSING_SOCIAL_CONTRIBUTION_MONTHS`.
+
+### NBU exchange rate
+
+- `GET /exchange-rates/nbu?currency=USD&date=YYYY-MM-DD`
+
+Success response (200):
+```json
+{
+  "currency": "USD",
+  "taxCurrency": "UAH",
+  "date": "2026-06-15",
+  "rate": 40.50,
+  "source": "NBU",
+  "fetchedAt": "2026-06-15T10:00:00Z"
+}
+```
+
+Only `USD` is supported for MVP. UAH invoices use rate `1.0` without lookup.
+Lookup failures return a clear error so clients can fall back to manual entry.
+
 ## Regular spendings (recurring expenses)
 
 These endpoints are specialized helpers for “Regular spendings” UI screens.
@@ -170,7 +254,7 @@ Success response (204): empty body.
 ### List records by month
 
 - `GET /workspaces/{workspaceId}/records?month=YYYY-MM`
-- Optional filter: `recordType=INVOICE|EXPENSE|STATE_PAYMENT|TRANSFER|BUDGET|REGULAR_SPENDING`
+- Optional filter: `recordType=INVOICE|EXPENSE|STATE_PAYMENT|TRANSFER|BUDGET|REGULAR_SPENDING|BUSINESS_ENTITY_INVOICE`
 - Optional sort: `sort=eventDateDesc`
 - Optional pagination: `limit=<1..200>&nextToken=<opaque>` (when `nextToken` is provided, `limit` is required)
 
@@ -182,7 +266,7 @@ Success response (200):
 ### List records by quarter
 
 - `GET /workspaces/{workspaceId}/records?quarter=YYYY-Q1`
-- Optional filter: `recordType=INVOICE|EXPENSE|STATE_PAYMENT|TRANSFER|BUDGET|REGULAR_SPENDING`
+- Optional filter: `recordType=INVOICE|EXPENSE|STATE_PAYMENT|TRANSFER|BUDGET|REGULAR_SPENDING|BUSINESS_ENTITY_INVOICE`
 - Optional sort: `sort=eventDateDesc`
 - Optional pagination: `limit=<1..200>&nextToken=<opaque>` (when `nextToken` is provided, `limit` is required)
 
@@ -194,7 +278,8 @@ Success response (200):
 ### List records by year
 
 - `GET /workspaces/{workspaceId}/records?year=YYYY`
-- Optional filter: `recordType=INVOICE|EXPENSE|STATE_PAYMENT|TRANSFER|BUDGET|REGULAR_SPENDING`
+- Optional filter: `recordType=INVOICE|EXPENSE|STATE_PAYMENT|TRANSFER|BUDGET|REGULAR_SPENDING|BUSINESS_ENTITY_INVOICE`
+- Required with `BUSINESS_ENTITY_INVOICE`: `entityId=ent_...`
 - Optional sort: `sort=eventDateDesc`
 - Optional pagination: `limit=<1..200>&nextToken=<opaque>` (when `nextToken` is provided, `limit` is required)
 
@@ -270,6 +355,40 @@ All Money values are JSON numbers. All rate/percentage values are JSON numbers i
   "amountReceivedOverride": 1100.00
 }
 ```
+
+Existing Spanish invoices without `entityId` are treated as
+`entityId = "autonomo"` for compatibility. Spanish invoices must keep using
+`recordType = "INVOICE"`.
+
+### Ukrainian FOP business-entity invoice
+
+Ukrainian FOP invoices use the generic records endpoints with
+`recordType = "BUSINESS_ENTITY_INVOICE"`. `receivedDate` controls storage
+`eventDate`, tax year, summary grouping, and invoice-number uniqueness.
+
+```json
+{
+  "entityId": "ent_01JYEXAMPLEFOP",
+  "invoiceType": "UKRAINIAN_FOP",
+  "invoiceDate": "2026-06-01",
+  "receivedDate": "2026-06-15",
+  "number": "FOP-2026-001",
+  "client": "Acme",
+  "amount": 1000.00,
+  "currency": "USD",
+  "taxCurrency": "UAH",
+  "exchangeRateToTaxCurrency": 40.50,
+  "exchangeRateSource": "NBU",
+  "exchangeRateDate": "2026-06-15",
+  "exchangeRateFetchedAt": "2026-06-15T10:00:00Z",
+  "amountTaxCurrency": 40500.00
+}
+```
+
+For manual exchange rates, use `exchangeRateSource = "MANUAL"` and omit
+`exchangeRateFetchedAt`. Active-entity create/update/delete is hard-delete on
+delete, matching existing record behavior. Archived-entity invoices are
+read-only history.
 
 ### Expense
 

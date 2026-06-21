@@ -124,6 +124,7 @@ class SummariesService(
                 RecordType.TRANSFER -> Unit
                 RecordType.BUDGET -> Unit
                 RecordType.REGULAR_SPENDING -> Unit
+                RecordType.BUSINESS_ENTITY_INVOICE -> Unit
             }
         }
 

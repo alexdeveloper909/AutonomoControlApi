@@ -13,7 +13,8 @@ interface WorkspaceSettingsServicePort {
         workspaceId: String,
         settings: Settings,
         updatedBy: String,
-        preserveExistingBalanceAccounts: Boolean = false
+        preserveExistingBalanceAccounts: Boolean = false,
+        preserveExistingEntities: Boolean = true
     )
 }
 
@@ -26,21 +27,29 @@ class WorkspaceSettingsService(
         workspaceId: String,
         settings: Settings,
         updatedBy: String,
-        preserveExistingBalanceAccounts: Boolean
+        preserveExistingBalanceAccounts: Boolean,
+        preserveExistingEntities: Boolean
     ) {
         val existing = repository.getSettings(workspaceId)
-        val merged = if (preserveExistingBalanceAccounts && existing?.balanceAccounts != null) {
-            settings.copy(balanceAccounts = existing.balanceAccounts)
-        } else {
-            settings
+        var merged = settings
+        if (preserveExistingBalanceAccounts && existing?.balanceAccounts != null) {
+            merged = merged.copy(balanceAccounts = existing.balanceAccounts)
+        }
+        if (preserveExistingEntities && existing?.entities != null) {
+            merged = merged.copy(entities = existing.entities)
         }
 
-        validateSettingsUpdate(existing, merged)
+        validateSettingsUpdate(existing, merged, preserveExistingEntities)
         repository.putSettings(workspaceId, merged, updatedBy)
     }
 
-    private fun validateSettingsUpdate(existing: Settings?, incoming: Settings) {
+    private fun validateSettingsUpdate(existing: Settings?, incoming: Settings, preserveExistingEntities: Boolean) {
         DomainValidation.validateSettings(incoming)
+        if (!preserveExistingEntities) {
+            require(incoming.entities == existing?.entities) {
+                "Business entities must be managed through business-entity endpoints"
+            }
+        }
         val existingAccounts = existing?.balanceAccounts.orEmpty().associateBy { it.accountId }
         val incomingAccounts = incoming.balanceAccounts.orEmpty()
 

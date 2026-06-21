@@ -2,7 +2,9 @@ package autonomo.service
 
 import autonomo.config.JsonSupport
 import autonomo.domain.BalanceMovement
+import autonomo.domain.BusinessEntity
 import autonomo.domain.DomainValidation
+import autonomo.domain.UkrainianFopInvoice
 import autonomo.domain.validateBalanceMovementEdit
 import autonomo.domain.normalizedBalanceAccounts
 import autonomo.model.RecordItem
@@ -43,7 +45,8 @@ interface RecordsServicePort {
 data class RecordsListOptions(
     val sort: RecordsSort? = null,
     val limit: Int? = null,
-    val nextToken: String? = null
+    val nextToken: String? = null,
+    val entityId: String? = null
 )
 
 enum class RecordsSort {
@@ -64,6 +67,7 @@ class RecordsService(
         val payload = RecordPayloadParser.parse(request.recordType, request.payload)
         val eventDate = RecordPayloadParser.eventDate(request.recordType, payload)
         validateTransferCreate(workspaceId, request.recordType, payload)
+        validateBusinessEntityInvoiceCreate(workspaceId, request.recordType, payload)
         if (request.recordType == RecordType.BUDGET) {
             ensureBudgetMonthIsUnique(workspaceId, eventDate)
         }
@@ -110,10 +114,11 @@ class RecordsService(
         val derivedEventDate = RecordPayloadParser.eventDate(recordType, payload)
         if (recordType == RecordType.BUDGET) {
             require(derivedEventDate == eventDate) { "Budget month cannot be changed" }
-        } else if (recordType != RecordType.TRANSFER) {
+        } else if (recordType != RecordType.TRANSFER && recordType != RecordType.BUSINESS_ENTITY_INVOICE) {
             require(derivedEventDate == eventDate) { "eventDate must match the existing recordKey" }
         }
         validateTransferUpdate(workspaceId, recordType, existing, payload)
+        validateBusinessEntityInvoiceUpdate(workspaceId, recordType, existing, payload)
 
         val now = Instant.now()
         val newRecordKey = RecordKey.build(recordType, derivedEventDate, recordId)
@@ -149,6 +154,14 @@ class RecordsService(
     }
 
     override fun deleteRecord(workspaceId: String, recordKey: String) {
+        val existing = repository.get(workspaceId, recordKey)
+        if (existing?.recordType == RecordType.BUSINESS_ENTITY_INVOICE) {
+            val parsed = RecordPayloadParser.parse(existing.recordType, JsonSupport.mapper.readTree(existing.payloadJson))
+                as RecordPayloadParser.ParsedBusinessEntityInvoice
+            val entity = loadBusinessEntity(workspaceId, parsed.invoice.entityId)
+                ?: throw IllegalArgumentException("business entity not found")
+            DomainValidation.validateBusinessEntityInvoiceMutationAllowed(entity)
+        }
         repository.delete(workspaceId, recordKey)
     }
 
@@ -192,10 +205,20 @@ class RecordsService(
     }
 
     private fun toPagedResponse(items: List<RecordItem>, options: RecordsListOptions): RecordsResponse {
+        val filtered = when {
+            options.entityId != null -> items.filter { item ->
+                if (item.recordType != RecordType.BUSINESS_ENTITY_INVOICE) return@filter false
+                val parsed = RecordPayloadParser.parse(item.recordType, JsonSupport.mapper.readTree(item.payloadJson))
+                    as RecordPayloadParser.ParsedBusinessEntityInvoice
+                parsed.invoice.entityId == options.entityId
+            }
+            else -> items
+        }
+
         val sorted = when (options.sort) {
             RecordsSort.EVENT_DATE_DESC ->
-                items.sortedWith(compareByDescending<RecordItem> { it.eventDate }.thenByDescending { it.recordKey })
-            null -> items
+                filtered.sortedWith(compareByDescending<RecordItem> { it.eventDate }.thenByDescending { it.recordKey })
+            null -> filtered
         }
 
         val startIndex = options.nextToken?.let { token ->
@@ -259,6 +282,57 @@ class RecordsService(
             throw RecordConflictException("Budget entry already exists for ${eventDate.toString().substring(0, 7)}")
         }
     }
+
+    private fun validateBusinessEntityInvoiceCreate(workspaceId: String, recordType: RecordType, payload: Any) {
+        if (recordType != RecordType.BUSINESS_ENTITY_INVOICE) return
+        val parsed = payload as RecordPayloadParser.ParsedBusinessEntityInvoice
+        val entity = loadBusinessEntity(workspaceId, parsed.invoice.entityId)
+            ?: throw IllegalArgumentException("business entity not found")
+        DomainValidation.validateBusinessEntityInvoice(parsed.invoice, entity)
+        validateUniqueUkrainianFopInvoiceNumber(workspaceId, parsed.invoice)
+    }
+
+    private fun validateBusinessEntityInvoiceUpdate(
+        workspaceId: String,
+        recordType: RecordType,
+        existing: RecordItem,
+        payload: Any
+    ) {
+        if (recordType != RecordType.BUSINESS_ENTITY_INVOICE) return
+        val parsed = payload as RecordPayloadParser.ParsedBusinessEntityInvoice
+        val before = RecordPayloadParser.parse(recordType, JsonSupport.mapper.readTree(existing.payloadJson))
+            as RecordPayloadParser.ParsedBusinessEntityInvoice
+        require(parsed.invoice.entityId == before.invoice.entityId) {
+            "BusinessEntityInvoice.entityId cannot be changed"
+        }
+        val entity = loadBusinessEntity(workspaceId, parsed.invoice.entityId)
+            ?: throw IllegalArgumentException("business entity not found")
+        DomainValidation.validateBusinessEntityInvoice(parsed.invoice, entity)
+        validateUniqueUkrainianFopInvoiceNumber(workspaceId, parsed.invoice, before.invoice)
+    }
+
+    private fun validateUniqueUkrainianFopInvoiceNumber(
+        workspaceId: String,
+        candidate: UkrainianFopInvoice,
+        replacing: UkrainianFopInvoice? = null
+    ) {
+        val existing = repository.queryByWorkspaceRecordKeyPrefix(
+            workspaceId,
+            "${RecordType.BUSINESS_ENTITY_INVOICE.name}#${candidate.receivedDate.year}-"
+        ).mapNotNull { item ->
+            runCatching {
+                val parsed = RecordPayloadParser.parse(item.recordType, JsonSupport.mapper.readTree(item.payloadJson))
+                    as RecordPayloadParser.ParsedBusinessEntityInvoice
+                parsed.invoice
+            }.getOrNull()
+        }
+        DomainValidation.validateUniqueUkrainianFopInvoiceNumber(candidate, existing, replacing)
+    }
+
+    private fun loadBusinessEntity(workspaceId: String, entityId: String): BusinessEntity? =
+        settingsRepository.getSettings(workspaceId)
+            ?.businessEntities()
+            ?.firstOrNull { it.entityId == entityId }
 
     private fun validateTransferCreate(workspaceId: String, recordType: RecordType, payload: Any) {
         if (recordType != RecordType.TRANSFER) return

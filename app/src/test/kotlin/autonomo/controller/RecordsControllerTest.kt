@@ -135,6 +135,36 @@ class RecordsControllerTest {
     }
 
     @Test
+    fun listBusinessEntityInvoicesRequiresEntityId() {
+        val controller = RecordsController(FakeRecordsService(), FakeAccessService(true))
+
+        val response = controller.listRecords(
+            "ws-1",
+            mapOf("year" to "2026", "recordType" to "BUSINESS_ENTITY_INVOICE"),
+            UserContext("user-1", "user@example.com")
+        )
+
+        assertEquals(400, response.statusCode)
+        val error = JsonSupport.mapper.readValue(response.body, ApiError::class.java)
+        assertEquals("entityId is required for BUSINESS_ENTITY_INVOICE records", error.message)
+    }
+
+    @Test
+    fun listRecordsRejectsEntityIdForSpanishInvoices() {
+        val controller = RecordsController(FakeRecordsService(), FakeAccessService(true))
+
+        val response = controller.listRecords(
+            "ws-1",
+            mapOf("year" to "2026", "recordType" to "INVOICE", "entityId" to "ent_fop"),
+            UserContext("user-1", "user@example.com")
+        )
+
+        assertEquals(400, response.statusCode)
+        val error = JsonSupport.mapper.readValue(response.body, ApiError::class.java)
+        assertEquals("entityId is not supported for this recordType", error.message)
+    }
+
+    @Test
     fun listRecordsRejectsInvalidSort() {
         val controller = RecordsController(FakeRecordsService(), FakeAccessService(true))
 

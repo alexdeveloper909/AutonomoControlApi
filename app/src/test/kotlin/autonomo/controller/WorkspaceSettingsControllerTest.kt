@@ -91,7 +91,8 @@ class WorkspaceSettingsControllerTest {
             workspaceId: String,
             settings: Settings,
             updatedBy: String,
-            preserveExistingBalanceAccounts: Boolean
+            preserveExistingBalanceAccounts: Boolean,
+            preserveExistingEntities: Boolean
         ) {
             savedSettings = settings
         }

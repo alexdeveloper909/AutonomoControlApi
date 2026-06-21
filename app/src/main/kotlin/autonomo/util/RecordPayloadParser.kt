@@ -4,6 +4,8 @@ import autonomo.config.JsonSupport
 import autonomo.domain.BalanceAccount
 import autonomo.domain.BalanceMovement
 import autonomo.domain.BudgetEntry
+import autonomo.domain.BusinessEntityInvoiceType
+import autonomo.domain.ExchangeRateSource
 import autonomo.domain.Expense
 import autonomo.domain.Invoice
 import autonomo.domain.Money
@@ -13,13 +15,21 @@ import autonomo.domain.RegularSpendingCadence
 import autonomo.domain.RegularSpendingScheduleType
 import autonomo.domain.StatePayment
 import autonomo.domain.Transfer
+import autonomo.domain.UkrainianFopInvoice
 import autonomo.model.RecordType
 import com.fasterxml.jackson.databind.JsonNode
+import java.time.Instant
 import java.math.BigDecimal
 import java.time.LocalDate
 import java.time.YearMonth
 
 object RecordPayloadParser {
+    data class ParsedBusinessEntityInvoice(
+        val invoice: UkrainianFopInvoice,
+        val exchangeRateDate: LocalDate,
+        val exchangeRateFetchedAt: Instant?
+    )
+
     fun parse(recordType: RecordType, payload: JsonNode): Any {
         return when (recordType) {
             RecordType.INVOICE -> JsonSupport.mapper.treeToValue(payload, Invoice::class.java)
@@ -28,6 +38,7 @@ object RecordPayloadParser {
             RecordType.TRANSFER -> parseBalanceMovement(payload)
             RecordType.BUDGET -> parseBudgetEntry(payload)
             RecordType.REGULAR_SPENDING -> parseRegularSpending(payload)
+            RecordType.BUSINESS_ENTITY_INVOICE -> parseBusinessEntityInvoice(payload)
         }
     }
 
@@ -49,6 +60,7 @@ object RecordPayloadParser {
             }
             RecordType.BUDGET -> (payload as BudgetEntry).monthKey.firstDay()
             RecordType.REGULAR_SPENDING -> (payload as RegularSpending).startDate
+            RecordType.BUSINESS_ENTITY_INVOICE -> (payload as ParsedBusinessEntityInvoice).invoice.receivedDate
         }
     }
 
@@ -57,6 +69,7 @@ object RecordPayloadParser {
             is BalanceMovement -> JsonSupport.mapper.writeValueAsString(payload.toNormalizedJson())
             is BudgetEntry -> JsonSupport.mapper.writeValueAsString(payload.toNormalizedJson())
             is RegularSpending -> JsonSupport.mapper.writeValueAsString(payload.toNormalizedJson())
+            is ParsedBusinessEntityInvoice -> JsonSupport.mapper.writeValueAsString(payload.toNormalizedJson())
             else -> JsonSupport.mapper.writeValueAsString(payload)
         }
 
@@ -89,6 +102,52 @@ object RecordPayloadParser {
                 note = transfer.note
             )
         }
+    }
+
+    private fun parseBusinessEntityInvoice(payload: JsonNode): ParsedBusinessEntityInvoice {
+        val invoiceType = payload.requiredField("invoiceType").asText()
+        require(invoiceType == BusinessEntityInvoiceType.UKRAINIAN_FOP.name) {
+            "invoiceType is invalid"
+        }
+
+        val receivedDate = payload.requiredField("receivedDate").asLocalDate("receivedDate")
+        val exchangeRateDate = payload.requiredField("exchangeRateDate").asLocalDate("exchangeRateDate")
+        require(exchangeRateDate == receivedDate) {
+            "exchangeRateDate must match receivedDate"
+        }
+
+        val exchangeRateSource = payload.requiredField("exchangeRateSource").asEnum<ExchangeRateSource>("exchangeRateSource")
+        val fetchedAt = payload.get("exchangeRateFetchedAt")
+            ?.takeUnless { it.isNull }
+            ?.let { node ->
+                runCatching { Instant.parse(node.asText()) }
+                    .getOrElse { throw IllegalArgumentException("exchangeRateFetchedAt must be an ISO instant") }
+            }
+        if (exchangeRateSource == ExchangeRateSource.MANUAL) {
+            require(fetchedAt == null) {
+                "exchangeRateFetchedAt must be absent for manual exchange rates"
+            }
+        }
+
+        val invoice = UkrainianFopInvoice(
+            entityId = payload.requiredField("entityId").asText().trim(),
+            invoiceDate = payload.requiredField("invoiceDate").asLocalDate("invoiceDate"),
+            receivedDate = receivedDate,
+            number = payload.requiredField("number").asText(),
+            client = payload.requiredField("client").asText(),
+            amount = payload.requiredField("amount").asMoney("amount"),
+            currency = payload.requiredField("currency").asText().trim().uppercase(),
+            taxCurrency = payload.requiredField("taxCurrency").asText().trim().uppercase(),
+            exchangeRateToTaxCurrency = payload.requiredField("exchangeRateToTaxCurrency").asBigDecimal("exchangeRateToTaxCurrency"),
+            exchangeRateSource = exchangeRateSource,
+            amountTaxCurrencySnapshot = payload.requiredField("amountTaxCurrency").asMoney("amountTaxCurrency")
+        )
+
+        return ParsedBusinessEntityInvoice(
+            invoice = invoice,
+            exchangeRateDate = exchangeRateDate,
+            exchangeRateFetchedAt = fetchedAt
+        )
     }
 
     private fun parseBudgetEntry(payload: JsonNode): BudgetEntry {
@@ -207,6 +266,15 @@ object RecordPayloadParser {
         return Money(amount)
     }
 
+    private fun JsonNode.asBigDecimal(fieldName: String): BigDecimal {
+        return when {
+            isNumber -> decimalValue()
+            isTextual -> runCatching { BigDecimal(asText()) }
+                .getOrElse { throw IllegalArgumentException("$fieldName must be a number") }
+            else -> throw IllegalArgumentException("$fieldName must be a number")
+        }
+    }
+
     private fun BudgetEntry.toNormalizedJson(): JsonNode {
         val obj = JsonSupport.mapper.createObjectNode()
         obj.put("monthKey", monthKey.toString())
@@ -253,6 +321,25 @@ object RecordPayloadParser {
             }
         }
         note?.let { obj.put("note", it) }
+        return obj
+    }
+
+    private fun ParsedBusinessEntityInvoice.toNormalizedJson(): JsonNode {
+        val obj = JsonSupport.mapper.createObjectNode()
+        obj.put("entityId", invoice.entityId)
+        obj.put("invoiceType", invoice.invoiceType.name)
+        obj.put("invoiceDate", invoice.invoiceDate.toString())
+        obj.put("receivedDate", invoice.receivedDate.toString())
+        obj.put("number", invoice.number)
+        obj.put("client", invoice.client)
+        obj.put("amount", invoice.amount.amount)
+        obj.put("currency", invoice.currency)
+        obj.put("taxCurrency", invoice.taxCurrency)
+        obj.put("exchangeRateToTaxCurrency", invoice.exchangeRateToTaxCurrency)
+        obj.put("exchangeRateSource", invoice.exchangeRateSource!!.name)
+        obj.put("exchangeRateDate", exchangeRateDate.toString())
+        exchangeRateFetchedAt?.let { obj.put("exchangeRateFetchedAt", it.toString()) }
+        obj.put("amountTaxCurrency", invoice.amountTaxCurrency.amount)
         return obj
     }
 }

@@ -2,6 +2,8 @@ package autonomo.handler
 
 import autonomo.controller.RecordsController
 import autonomo.controller.BalanceController
+import autonomo.controller.BusinessEntitiesController
+import autonomo.controller.ExchangeRatesController
 import autonomo.controller.RegularSpendingsController
 import autonomo.controller.SummariesController
 import autonomo.controller.UsersController
@@ -20,6 +22,8 @@ import com.amazonaws.services.lambda.runtime.events.APIGatewayV2HTTPResponse
 class RecordsLambda : RequestHandler<APIGatewayV2HTTPEvent, APIGatewayV2HTTPResponse> {
     private val controller = RecordsController()
     private val balanceController = BalanceController()
+    private val businessEntitiesController = BusinessEntitiesController()
+    private val exchangeRatesController = ExchangeRatesController()
     private val summariesController = SummariesController()
     private val regularSpendingsController = RegularSpendingsController()
     private val workspacesController = WorkspacesController()
@@ -52,6 +56,13 @@ class RecordsLambda : RequestHandler<APIGatewayV2HTTPEvent, APIGatewayV2HTTPResp
 
         if (segments.size == 1 && segments[0] == "health") {
             return HttpResponses.ok(mapOf("status" to "ok"))
+        }
+
+        if (segments.size == 2 && segments[0] == "exchange-rates" && segments[1] == "nbu") {
+            return when (method) {
+                "GET" -> exchangeRatesController.nbuRate(event.queryStringParameters ?: emptyMap())
+                else -> HttpResponses.notFound("Route not found")
+            }
         }
 
         if (segments.size == 2 && segments[0] == "users" && segments[1] == "me") {
@@ -128,6 +139,28 @@ class RecordsLambda : RequestHandler<APIGatewayV2HTTPEvent, APIGatewayV2HTTPResp
                     regularSpendingsController.listDefinitions(workspaceId, user)
                 segments.size == 4 && segments[3] == "occurrences" && method == "GET" ->
                     regularSpendingsController.listOccurrences(workspaceId, event.queryStringParameters ?: emptyMap(), user)
+                else -> HttpResponses.notFound("Route not found")
+            }
+        }
+
+        if (segments.size >= 3 && segments[0] == "workspaces" && segments[2] == "business-entities") {
+            val workspaceId = segments.getOrNull(1)
+            return when {
+                segments.size == 3 && method == "GET" ->
+                    businessEntitiesController.listBusinessEntities(workspaceId, event.queryStringParameters ?: emptyMap(), user)
+                segments.size == 3 && method == "POST" ->
+                    businessEntitiesController.createBusinessEntity(workspaceId, event.body, user)
+                segments.size == 4 && method == "PUT" ->
+                    businessEntitiesController.updateBusinessEntity(workspaceId, segments[3], event.body, user)
+                segments.size == 5 && segments[4] == "archive" && method == "POST" ->
+                    businessEntitiesController.archiveBusinessEntity(workspaceId, segments[3], user)
+                segments.size == 5 && segments[4] == "summary" && method == "GET" ->
+                    businessEntitiesController.ukrainianFopSummary(
+                        workspaceId,
+                        segments[3],
+                        event.queryStringParameters ?: emptyMap(),
+                        user
+                    )
                 else -> HttpResponses.notFound("Route not found")
             }
         }

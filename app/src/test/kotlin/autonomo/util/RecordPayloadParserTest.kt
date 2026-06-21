@@ -476,6 +476,66 @@ class RecordPayloadParserTest {
         assertFalse(json.has("cadence"))
     }
 
+    @Test
+    fun parsesUkrainianFopInvoiceAndUsesReceivedDateAsEventDate() {
+        val parsed = RecordPayloadParser.parse(
+            RecordType.BUSINESS_ENTITY_INVOICE,
+            ukrainianFopPayload()
+        ) as RecordPayloadParser.ParsedBusinessEntityInvoice
+
+        assertEquals("ent_fop", parsed.invoice.entityId)
+        assertEquals(LocalDate.parse("2026-06-15"), parsed.invoice.receivedDate)
+        assertMoneyEquals("40500.00", parsed.invoice.amountTaxCurrency)
+        assertEquals(LocalDate.parse("2026-06-15"), RecordPayloadParser.eventDate(RecordType.BUSINESS_ENTITY_INVOICE, parsed))
+    }
+
+    @Test
+    fun serializesUkrainianFopInvoiceWithTransportSnapshotFields() {
+        val parsed = RecordPayloadParser.parse(
+            RecordType.BUSINESS_ENTITY_INVOICE,
+            ukrainianFopPayload()
+        )
+
+        val json = JsonSupport.mapper.readTree(RecordPayloadParser.toJson(parsed))
+
+        assertEquals("UKRAINIAN_FOP", json.get("invoiceType").asText())
+        assertEquals("2026-06-15", json.get("exchangeRateDate").asText())
+        assertEquals("2026-06-15T10:00:00Z", json.get("exchangeRateFetchedAt").asText())
+        assertEquals(0, json.get("amountTaxCurrency").decimalValue().compareTo(BigDecimal("40500.00")))
+        assertFalse(json.has("amountTaxCurrencySnapshot"))
+    }
+
+    @Test
+    fun rejectsManualUkrainianFopExchangeRateWithFetchedAt() {
+        val payload = ukrainianFopPayload(
+            overrides = """
+              "exchangeRateSource": "MANUAL",
+              "exchangeRateFetchedAt": "2026-06-15T10:00:00Z"
+            """.trimIndent()
+        )
+
+        val error = org.junit.jupiter.api.assertThrows<IllegalArgumentException> {
+            RecordPayloadParser.parse(RecordType.BUSINESS_ENTITY_INVOICE, payload)
+        }
+
+        assertEquals("exchangeRateFetchedAt must be absent for manual exchange rates", error.message)
+    }
+
+    @Test
+    fun rejectsUkrainianFopExchangeRateDateDifferentFromReceivedDate() {
+        val payload = ukrainianFopPayload(
+            overrides = """
+              "exchangeRateDate": "2026-06-14"
+            """.trimIndent()
+        )
+
+        val error = org.junit.jupiter.api.assertThrows<IllegalArgumentException> {
+            RecordPayloadParser.parse(RecordType.BUSINESS_ENTITY_INVOICE, payload)
+        }
+
+        assertEquals("exchangeRateDate must match receivedDate", error.message)
+    }
+
     private fun assertMoneyEquals(expected: String, actual: Money) {
         assertEquals(0, actual.amount.compareTo(BigDecimal(expected)))
     }
@@ -483,4 +543,26 @@ class RecordPayloadParserTest {
     private fun assertPercentageEquals(expected: String, actual: Percentage) {
         assertEquals(0, actual.value.compareTo(BigDecimal(expected)))
     }
+
+    private fun ukrainianFopPayload(overrides: String? = null) = JsonSupport.mapper.readTree(
+        """
+        {
+          "entityId": "ent_fop",
+          "invoiceType": "UKRAINIAN_FOP",
+          "invoiceDate": "2026-06-01",
+          "receivedDate": "2026-06-15",
+          "number": "FOP-1",
+          "client": "Acme",
+          "amount": 1000.00,
+          "currency": "USD",
+          "taxCurrency": "UAH",
+          "exchangeRateToTaxCurrency": 40.50,
+          "exchangeRateSource": "NBU",
+          "exchangeRateDate": "2026-06-15",
+          "exchangeRateFetchedAt": "2026-06-15T10:00:00Z",
+          "amountTaxCurrency": 40500.00
+          ${overrides?.let { ",$it" }.orEmpty()}
+        }
+        """.trimIndent()
+    )
 }
