@@ -4,6 +4,8 @@ import autonomo.domain.MonthSummary
 import autonomo.domain.QuarterSummary
 import autonomo.domain.IvaYearEstimate
 import autonomo.domain.RentaEstimate
+import autonomo.domain.RetaEstimate
+import autonomo.domain.RetaScenarioSettings
 import autonomo.domain.Settings
 
 data class MonthSummariesResponse(
@@ -25,4 +27,14 @@ data class RentaSummaryResponse(
     val settings: Settings,
     val renta: RentaEstimate?,
     val rentaProjected: RentaEstimate?
+)
+
+data class RetaSummaryRequest(
+    val settings: Settings,
+    val scenario: RetaScenarioSettings = RetaScenarioSettings()
+)
+
+data class RetaSummaryResponse(
+    val settings: Settings,
+    val reta: RetaEstimate
 )

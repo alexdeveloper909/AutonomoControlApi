@@ -1,6 +1,7 @@
 package autonomo.service
 
 import autonomo.config.JsonSupport
+import autonomo.domain.AUTONOMO_ENTITY_ID
 import autonomo.domain.DefaultDomainService
 import autonomo.domain.Expense
 import autonomo.domain.Invoice
@@ -9,12 +10,15 @@ import autonomo.domain.MonthSummary
 import autonomo.domain.QuarterSummary
 import autonomo.domain.RentaEstimate
 import autonomo.domain.RentaPlanner
+import autonomo.domain.RetaPlanner
+import autonomo.domain.RetaScenarioSettings
 import autonomo.domain.Settings
 import autonomo.domain.StatePayment
 import autonomo.model.MonthSummariesResponse
 import autonomo.model.IvaSummaryResponse
 import autonomo.model.QuarterSummariesResponse
 import autonomo.model.RentaSummaryResponse
+import autonomo.model.RetaSummaryResponse
 import autonomo.model.RecordItem
 import autonomo.model.RecordType
 import autonomo.repository.WorkspaceRecordsRepository
@@ -28,10 +32,12 @@ interface SummariesServicePort {
     fun quarterSummaries(workspaceId: String, settings: Settings): QuarterSummariesResponse
     fun ivaSummary(workspaceId: String, settings: Settings): IvaSummaryResponse
     fun rentaSummary(workspaceId: String, settings: Settings): RentaSummaryResponse
+    fun retaSummary(workspaceId: String, settings: Settings, scenario: RetaScenarioSettings): RetaSummaryResponse
 }
 
 class SummariesService(
-    private val repository: WorkspaceRecordsRepositoryPort = WorkspaceRecordsRepository()
+    private val repository: WorkspaceRecordsRepositoryPort = WorkspaceRecordsRepository(),
+    private val todayProvider: () -> LocalDate = { LocalDate.now() }
 ) : SummariesServicePort {
     override fun monthSummaries(workspaceId: String, settings: Settings): MonthSummariesResponse {
         val records = loadYearRecordsByMonth(workspaceId, settings.year)
@@ -81,6 +87,25 @@ class SummariesService(
         return RentaSummaryResponse(settings = settings, renta = renta, rentaProjected = rentaProjected)
     }
 
+    override fun retaSummary(
+        workspaceId: String,
+        settings: Settings,
+        scenario: RetaScenarioSettings
+    ): RetaSummaryResponse {
+        val records = loadRetaYearRecords(workspaceId, settings.year)
+        val parsed = parseRetaRecords(records)
+        val estimate = RetaPlanner.estimate(
+            settings = settings,
+            invoices = parsed.invoices,
+            expenses = parsed.expenses,
+            payments = parsed.payments,
+            today = todayProvider(),
+            scenario = scenario,
+            planningOverride = settings.retaPlanning
+        )
+        return RetaSummaryResponse(settings = settings, reta = estimate)
+    }
+
     private fun loadYearRecordsByMonth(workspaceId: String, year: Int) =
         (1..12).flatMap { month ->
             val yearMonth = YearMonth.of(year, month)
@@ -103,6 +128,19 @@ class SummariesService(
         )
         return taxYearRecords + januaryStatePayments
     }
+
+    private fun loadRetaYearRecords(workspaceId: String, year: Int): List<RecordItem> =
+        (1..12).flatMap { month ->
+            val yearMonth = YearMonth.of(year, month)
+            val workspaceMonth = "WS#$workspaceId#M#${yearMonth}"
+            listOf(
+                RecordType.INVOICE,
+                RecordType.EXPENSE,
+                RecordType.STATE_PAYMENT
+            ).flatMap { recordType ->
+                repository.queryByMonth(workspaceMonth, recordType = recordType)
+            }
+        }
 
     private data class ParsedRecords(
         val invoices: List<Invoice>,
@@ -132,6 +170,13 @@ class SummariesService(
             invoices = invoices,
             expenses = expenses,
             payments = payments
+        )
+    }
+
+    private fun parseRetaRecords(records: List<RecordItem>): ParsedRecords {
+        val parsed = parseRecords(records)
+        return parsed.copy(
+            invoices = parsed.invoices.filter { it.entityId == AUTONOMO_ENTITY_ID }
         )
     }
 

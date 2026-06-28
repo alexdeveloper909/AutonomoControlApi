@@ -1,6 +1,7 @@
 package autonomo.controller
 
 import autonomo.domain.Settings
+import autonomo.model.RetaSummaryRequest
 import autonomo.model.UserContext
 import autonomo.service.SummariesService
 import autonomo.service.SummariesServicePort
@@ -43,6 +44,16 @@ class SummariesController(
         }.getOrElse { HttpResponses.badRequest(it.message ?: "Invalid request") }
     }
 
+    fun retaSummary(workspaceId: String?, body: String?, user: UserContext?): HttpResponse {
+        if (workspaceId.isNullOrBlank()) return HttpResponses.badRequest("workspaceId is required")
+        val caller = user ?: return HttpResponses.unauthorized()
+        ensureAccess(workspaceId, caller)?.let { return it }
+        val request = parseRetaRequest(body) ?: return HttpResponses.badRequest("Invalid RETA summary request")
+        return runCatching {
+            HttpResponses.ok(service.retaSummary(workspaceId, request.settings, request.scenario))
+        }.getOrElse { HttpResponses.badRequest(it.message ?: "Invalid request") }
+    }
+
     fun ivaSummary(workspaceId: String?, body: String?, user: UserContext?): HttpResponse {
         if (workspaceId.isNullOrBlank()) return HttpResponses.badRequest("workspaceId is required")
         val caller = user ?: return HttpResponses.unauthorized()
@@ -56,6 +67,13 @@ class SummariesController(
     private fun parseSettings(body: String?): Settings? {
         if (body.isNullOrBlank()) return null
         return runCatching { autonomo.config.JsonSupport.mapper.readValue(body, Settings::class.java) }.getOrNull()
+    }
+
+    private fun parseRetaRequest(body: String?): RetaSummaryRequest? {
+        if (body.isNullOrBlank()) return null
+        return runCatching {
+            autonomo.config.JsonSupport.mapper.readValue(body, RetaSummaryRequest::class.java)
+        }.getOrNull()
     }
 
     private fun ensureAccess(workspaceId: String, user: UserContext): HttpResponse? {

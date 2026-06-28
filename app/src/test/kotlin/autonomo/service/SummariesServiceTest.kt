@@ -8,6 +8,12 @@ import autonomo.domain.Rate
 import autonomo.domain.RetencionRate
 import autonomo.domain.RentaPlanningSettings
 import autonomo.domain.IrpfTerritory
+import autonomo.domain.RetaBaseSelectionPolicy
+import autonomo.domain.RetaGenericDeductionMode
+import autonomo.domain.RetaPlanningSettings
+import autonomo.domain.RetaProjectionMode
+import autonomo.domain.RetaScenarioSettings
+import autonomo.domain.RetaWarningCode
 import autonomo.domain.Settings
 import autonomo.model.RecordItem
 import autonomo.model.RecordType
@@ -15,6 +21,7 @@ import autonomo.repository.WorkspaceRecordsRepositoryPort
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.math.BigDecimal
 import java.time.Instant
@@ -364,10 +371,128 @@ class SummariesServiceTest {
         assertEquals(2024, response.renta!!.taxYear)
     }
 
+    @Test
+    fun retaSummaryComputesEstimateFromFixtureRecords() {
+        val settings = retaSettings()
+        val invoiceItem = sampleItem(
+            workspaceId = "ws-1",
+            recordType = RecordType.INVOICE,
+            eventDate = LocalDate.parse("2026-03-20"),
+            payloadJson = JsonSupport.mapper.writeValueAsString(invoicePayload("2026-03-10", "INV-RETA", "1000.00")),
+            workspaceMonth = "WS#ws-1#M#2026-03",
+            workspaceQuarter = "WS#ws-1#Q#2026-Q1"
+        )
+        val expenseItem = sampleItem(
+            workspaceId = "ws-1",
+            recordType = RecordType.EXPENSE,
+            eventDate = LocalDate.parse("2026-03-21"),
+            payloadJson = JsonSupport.mapper.writeValueAsString(expensePayload("2026-03-20", "100.00")),
+            workspaceMonth = "WS#ws-1#M#2026-03",
+            workspaceQuarter = "WS#ws-1#Q#2026-Q1"
+        )
+        val seguridadSocialItem = sampleItem(
+            workspaceId = "ws-1",
+            recordType = RecordType.STATE_PAYMENT,
+            eventDate = LocalDate.parse("2026-03-31"),
+            payloadJson = JsonSupport.mapper.writeValueAsString(statePaymentPayload("2026-03-31", "SeguridadSocial", "300.00")),
+            workspaceMonth = "WS#ws-1#M#2026-03",
+            workspaceQuarter = "WS#ws-1#Q#2026-Q1"
+        )
+        val ignoredBusinessInvoice = sampleItem(
+            workspaceId = "ws-1",
+            recordType = RecordType.BUSINESS_ENTITY_INVOICE,
+            eventDate = LocalDate.parse("2026-03-20"),
+            payloadJson = "{}",
+            workspaceMonth = "WS#ws-1#M#2026-03",
+            workspaceQuarter = "WS#ws-1#Q#2026-Q1"
+        )
+
+        val repo = FakeRecordsRepository(
+            itemsByMonth = mapOf(
+                monthTypeKey("WS#ws-1#M#2026-03", RecordType.INVOICE) to listOf(invoiceItem),
+                monthTypeKey("WS#ws-1#M#2026-03", RecordType.EXPENSE) to listOf(expenseItem),
+                monthTypeKey("WS#ws-1#M#2026-03", RecordType.STATE_PAYMENT) to listOf(seguridadSocialItem),
+                monthTypeKey("WS#ws-1#M#2026-03", RecordType.BUSINESS_ENTITY_INVOICE) to listOf(ignoredBusinessInvoice)
+            )
+        )
+        val service = SummariesService(repo) { LocalDate.parse("2026-06-28") }
+
+        val response = service.retaSummary(
+            "ws-1",
+            settings,
+            RetaScenarioSettings(
+                projectionMode = RetaProjectionMode.MANUAL_FUTURE_MONTHLY_INCOME,
+                manualFutureMonthlyActivityNet = Money.eur("3500"),
+                baseSelectionPolicy = RetaBaseSelectionPolicy.CUSTOM,
+                customContributionBase = Money.eur("1437.91")
+            )
+        )
+
+        assertEquals(settings, response.settings)
+        assertEquals(2026, response.reta.year)
+        assertEquals(RetaProjectionMode.MANUAL_FUTURE_MONTHLY_INCOME, response.reta.projectionMode)
+        assertEquals(RetaGenericDeductionMode.GENERAL_7_PERCENT, response.reta.genericDeductionMode)
+        assertEquals(0, response.reta.irpfActivityNetAnnual.amount.compareTo(BigDecimal("24130.0000")))
+        assertEquals(0, response.reta.seguridadSocialPaidAnnual.amount.compareTo(BigDecimal("300.0000")))
+        assertEquals(0, response.reta.retaBeforeGenericDeduction.amount.compareTo(BigDecimal("24430.0000")))
+        assertEquals(0, response.reta.retaGenericDeductionAmount.amount.compareTo(BigDecimal("1710.1000")))
+        assertEquals(0, response.reta.retaComputableAnnualEarnings.amount.compareTo(BigDecimal("22719.9000")))
+        assertEquals(0, response.reta.retaAverageMonthlyEarnings.amount.compareTo(BigDecimal("1893.3200")))
+        assertEquals(5, response.reta.tramo?.tramo)
+        assertEquals(0, response.reta.selectedContributionBase?.amount?.compareTo(BigDecimal("1437.9100")))
+        assertTrue(repo.monthQueries.none { it.recordType == RecordType.BUSINESS_ENTITY_INVOICE })
+        assertTrue(repo.monthQueries.none { it.recordType == RecordType.TRANSFER })
+        assertTrue(repo.monthQueries.none { it.recordType == RecordType.BUDGET })
+        assertTrue(repo.monthQueries.none { it.recordType == RecordType.REGULAR_SPENDING })
+    }
+
+    @Test
+    fun retaSummaryIgnoresNonAutonomoInvoices() {
+        val settings = retaSettings()
+        val fopInvoice = sampleItem(
+            workspaceId = "ws-1",
+            recordType = RecordType.INVOICE,
+            eventDate = LocalDate.parse("2026-03-20"),
+            payloadJson = JsonSupport.mapper.writeValueAsString(
+                invoicePayload("2026-03-10", "INV-FOP", "9999.00", entityId = "ent_fop")
+            ),
+            workspaceMonth = "WS#ws-1#M#2026-03",
+            workspaceQuarter = "WS#ws-1#Q#2026-Q1"
+        )
+        val repo = FakeRecordsRepository(
+            itemsByMonth = mapOf(monthTypeKey("WS#ws-1#M#2026-03", RecordType.INVOICE) to listOf(fopInvoice))
+        )
+        val service = SummariesService(repo) { LocalDate.parse("2026-06-28") }
+
+        val response = service.retaSummary("ws-1", settings, RetaScenarioSettings())
+
+        assertEquals(0, response.reta.irpfActivityNetAnnual.amount.compareTo(BigDecimal.ZERO.setScale(4)))
+        assertTrue(response.reta.warningCodes.contains(RetaWarningCode.MANUAL_FUTURE_MONTHLY_ACTIVITY_NET_REQUIRED))
+        assertTrue(response.reta.warningCodes.contains(RetaWarningCode.VERY_LOW_OR_NEGATIVE_EARNINGS_VERIFY_MINIMUM_CONTRIBUTION))
+    }
+
+    @Test
+    fun retaSummaryWithNoDataReturnsActionableWarning() {
+        val settings = retaSettings()
+        val repo = FakeRecordsRepository()
+        val service = SummariesService(repo) { LocalDate.parse("2026-06-28") }
+
+        val response = service.retaSummary("ws-1", settings, RetaScenarioSettings())
+
+        assertEquals(0, response.reta.irpfActivityNetAnnual.amount.compareTo(BigDecimal.ZERO.setScale(4)))
+        assertTrue(response.reta.warningCodes.contains(RetaWarningCode.MANUAL_FUTURE_MONTHLY_ACTIVITY_NET_REQUIRED))
+        assertTrue(response.reta.warningCodes.contains(RetaWarningCode.VERY_LOW_OR_NEGATIVE_EARNINGS_VERIFY_MINIMUM_CONTRIBUTION))
+        assertEquals(36, repo.monthQueries.size)
+    }
+
     private class FakeRecordsRepository(
         private val itemsByMonth: Map<String, List<RecordItem>> = emptyMap(),
         private val itemsByQuarter: Map<String, List<RecordItem>> = emptyMap()
     ) : WorkspaceRecordsRepositoryPort {
+        data class MonthQuery(val workspaceMonth: String, val recordType: RecordType?)
+
+        val monthQueries = mutableListOf<MonthQuery>()
+
         override fun create(record: RecordItem) = throw UnsupportedOperationException()
         override fun update(record: RecordItem) = throw UnsupportedOperationException()
         override fun get(workspaceId: String, recordKey: String): RecordItem? = throw UnsupportedOperationException()
@@ -379,8 +504,11 @@ class SummariesServiceTest {
         override fun queryByWorkspaceRecordKeyPrefix(workspaceId: String, recordKeyPrefix: String): List<RecordItem> =
             emptyList()
 
-        override fun queryByMonth(workspaceMonth: String, recordType: RecordType?): List<RecordItem> =
-            itemsByMonth[workspaceMonth].orEmpty()
+        override fun queryByMonth(workspaceMonth: String, recordType: RecordType?): List<RecordItem> {
+            monthQueries += MonthQuery(workspaceMonth, recordType)
+            return itemsByMonth["$workspaceMonth#${recordType?.name ?: "ALL"}"].orEmpty() +
+                itemsByMonth[workspaceMonth].orEmpty()
+        }
 
         override fun queryByQuarter(workspaceQuarter: String, recordType: RecordType?): List<RecordItem> =
             itemsByQuarter[workspaceQuarter].orEmpty()
@@ -412,4 +540,51 @@ class SummariesServiceTest {
             updatedBy = "user-1"
         )
     }
+
+    private fun retaSettings(): Settings =
+        Settings(
+            year = 2026,
+            startDate = LocalDate.parse("2026-01-01"),
+            ivaStd = IvaRate.STANDARD.toRate(),
+            irpfRate = Rate.fromDecimal("0.20"),
+            obligacion130 = false,
+            openingBalance = Money.ZERO,
+            retaPlanning = RetaPlanningSettings(enabled = true)
+        )
+
+    private fun invoicePayload(
+        invoiceDate: String,
+        number: String,
+        baseExclVat: String,
+        entityId: String = "autonomo"
+    ) = mapOf(
+        "invoiceDate" to invoiceDate,
+        "number" to number,
+        "client" to "Acme",
+        "baseExclVat" to BigDecimal(baseExclVat),
+        "ivaRate" to "STANDARD",
+        "retencion" to "ZERO",
+        "paymentDate" to invoiceDate,
+        "entityId" to entityId
+    )
+
+    private fun expensePayload(documentDate: String, baseExclVat: String) = mapOf(
+        "documentDate" to documentDate,
+        "vendor" to "Vendor",
+        "category" to "Software",
+        "baseExclVat" to BigDecimal(baseExclVat),
+        "ivaRate" to "ZERO",
+        "vatRecoverableFlag" to false,
+        "deductibleShare" to BigDecimal("1.00"),
+        "paymentDate" to documentDate
+    )
+
+    private fun statePaymentPayload(paymentDate: String, type: String, amount: String) = mapOf(
+        "paymentDate" to paymentDate,
+        "type" to type,
+        "amount" to BigDecimal(amount)
+    )
+
+    private fun monthTypeKey(workspaceMonth: String, recordType: RecordType?): String =
+        "$workspaceMonth#${recordType?.name ?: "ALL"}"
 }

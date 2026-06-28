@@ -55,6 +55,7 @@ in the Lambda handler/controller, also add the corresponding route in the CDK st
 - `POST /workspaces/{workspaceId}/summaries/quarters`
 - `POST /workspaces/{workspaceId}/summaries/iva`
 - `POST /workspaces/{workspaceId}/summaries/renta`
+- `POST /workspaces/{workspaceId}/summaries/reta`
 - `GET /workspaces/{workspaceId}/regular-spendings`
 - `GET /workspaces/{workspaceId}/regular-spendings/occurrences?from=YYYY-MM-DD&to=YYYY-MM-DD`
 - `GET /workspaces/{workspaceId}/business-entities?includeArchived=true`
@@ -318,6 +319,8 @@ Responses include `items` with `monthKey` (`YYYY-MM`) or `quarterKey` (`{ "year"
 `POST /workspaces/{workspaceId}/summaries/iva` returns `{ "settings": ..., "iva": IvaYearEstimate }`, including quarter-by-quarter output IVA, deductible input IVA, payable amount, credit carry-forward, and Q4 refund/carry-forward candidate fields.
 
 `POST /workspaces/{workspaceId}/summaries/renta` returns an annual IRPF estimate for planning when `settings.rentaPlanning.enabled=true` (otherwise `renta` is `null`). It may also include `rentaProjected` (run-rate projection) to provide earlier-year planning visibility.
+
+`POST /workspaces/{workspaceId}/summaries/reta` returns a Seguridad Social / RETA planning estimate. The request body is `{ "settings": Settings, "scenario": RetaScenarioSettings }`; `scenario` contains page-local inputs such as projection mode, manual future monthly activity net, and custom contribution base. The endpoint is read-only and loads only Spanish/autonomo invoices, expenses, and state payments for `settings.year`. Transfers, budgets, regular spendings, and business-entity invoices are not RETA inputs. The response is `{ "settings": ..., "reta": RetaEstimate }`, including average monthly RETA earnings, matched tramo, contribution-base range, cuota scenarios, change windows, source links, and warning codes.
 
 `eventDate` is derived by type:
 - Invoice: `paymentDate ?: invoiceDate`

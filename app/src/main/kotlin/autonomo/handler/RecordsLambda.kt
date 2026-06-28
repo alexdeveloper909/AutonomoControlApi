@@ -193,6 +193,8 @@ class RecordsLambda : RequestHandler<APIGatewayV2HTTPEvent, APIGatewayV2HTTPResp
                     summariesController.ivaSummary(workspaceId, event.body, user)
                 segments[3] == "renta" && method == "POST" ->
                     summariesController.rentaSummary(workspaceId, event.body, user)
+                segments[3] == "reta" && method == "POST" ->
+                    summariesController.retaSummary(workspaceId, event.body, user)
                 else -> HttpResponses.notFound("Route not found")
             }
         }

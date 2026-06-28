@@ -2,6 +2,8 @@ package autonomo.controller
 
 import autonomo.domain.Money
 import autonomo.domain.Rate
+import autonomo.domain.RetaProjectionMode
+import autonomo.domain.RetaScenarioSettings
 import autonomo.domain.Settings
 import autonomo.model.UserContext
 import autonomo.service.SummariesServicePort
@@ -65,6 +67,37 @@ class SummariesControllerTest {
     }
 
     @Test
+    fun retaSummaryReturns200ForWorkspaceMember() {
+        val controller = SummariesController(FakeSummariesService(), FakeAccessService(true))
+        val body = retaRequestJson(year = 2026)
+
+        val response = controller.retaSummary("ws-1", body, UserContext("user-1", "user@example.com"))
+
+        assertEquals(200, response.statusCode)
+        assertTrue(response.body?.contains("\"reta\"") == true)
+    }
+
+    @Test
+    fun retaSummaryWithoutMembershipReturns403() {
+        val controller = SummariesController(FakeSummariesService(), FakeAccessService(false))
+
+        val response = controller.retaSummary("ws-1", retaRequestJson(2026), UserContext("user-1", null))
+
+        assertEquals(403, response.statusCode)
+    }
+
+    @Test
+    fun retaSummaryRejectsInvalidRequestBody() {
+        val controller = SummariesController(FakeSummariesService(), FakeAccessService(true))
+
+        val response = controller.retaSummary("ws-1", "{", UserContext("user-1", null))
+
+        assertEquals(400, response.statusCode)
+        val error = autonomo.config.JsonSupport.mapper.readValue(response.body, ApiError::class.java)
+        assertEquals("Invalid RETA summary request", error.message)
+    }
+
+    @Test
     fun ivaSummaryReturns200() {
         val controller = SummariesController(FakeSummariesService(), FakeAccessService(true))
         val body = settingsJson(year = 2024)
@@ -100,6 +133,20 @@ class SummariesControllerTest {
                 renta = null,
                 rentaProjected = null
             )
+
+        override fun retaSummary(workspaceId: String, settings: Settings, scenario: RetaScenarioSettings) =
+            autonomo.model.RetaSummaryResponse(
+                settings = settings,
+                reta = autonomo.domain.RetaPlanner.estimate(
+                    settings = settings,
+                    invoices = emptyList(),
+                    expenses = emptyList(),
+                    payments = emptyList(),
+                    today = LocalDate.of(settings.year, 6, 28),
+                    scenario = scenario,
+                    planningOverride = settings.retaPlanning
+                )
+            )
     }
 
     private class FakeAccessService(private val allowed: Boolean) : WorkspaceAccessPort {
@@ -123,5 +170,25 @@ class SummariesControllerTest {
             rentaPlanning = null
         )
         return autonomo.config.JsonSupport.mapper.writeValueAsString(settings)
+    }
+
+    private fun retaRequestJson(year: Int): String {
+        val settings = Settings(
+            year = year,
+            startDate = LocalDate.of(year, 1, 1),
+            ivaStd = Rate.fromDecimal("0.21"),
+            irpfRate = Rate.fromDecimal("0.20"),
+            obligacion130 = true,
+            openingBalance = Money.ZERO,
+            retaPlanning = autonomo.domain.RetaPlanningSettings(enabled = true)
+        )
+        val request = autonomo.model.RetaSummaryRequest(
+            settings = settings,
+            scenario = RetaScenarioSettings(
+                projectionMode = RetaProjectionMode.MANUAL_FUTURE_MONTHLY_INCOME,
+                manualFutureMonthlyActivityNet = Money.eur("3500")
+            )
+        )
+        return autonomo.config.JsonSupport.mapper.writeValueAsString(request)
     }
 }

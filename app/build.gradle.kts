@@ -55,7 +55,7 @@ dependencies {
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.17.2")
     implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.17.2")
     implementation(kotlin("reflect"))
-    implementation("com.alex:autonomo-control-core:2.2.0")
+    implementation("com.alex:autonomo-control-core:2.3.0")
 }
 
 testing {
